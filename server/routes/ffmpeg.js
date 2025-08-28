@@ -16,6 +16,11 @@ function transcodeBuffer(trackBuffer, format) {
 
       const command = ffmpeg(inputStream)
         .toFormat(format)
+        .outputOptions(
+          "-threads 0",                     // use all CPU cores
+          format === "mp3" ? "-qscale:a 0" : "-compression_level 12", // max quality
+          "-af aresample=resampler=soxr:osf=s32:ocl=fltp" // CPU-heavy resampling
+        )
         .on("error", (err) => {
           console.error("FFmpeg error:", err);
           reject(err);
