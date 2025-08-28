@@ -19,6 +19,10 @@ COPY server/package*.json ./
 RUN npm install --build-from-source
 COPY server ./
 
+RUN apt-get update && \
+    apt-get install -y ffmpeg python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy built client
 COPY --from=client-build /usr/src/client/dist ./client/dist
 
