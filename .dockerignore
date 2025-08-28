@@ -1,0 +1,21 @@
+# Node dependencies
+**/node_modules
+**/npm-debug.log
+**/yarn-error.log
+**/pnpm-debug.log
+
+# Build outputs
+client/dist
+client/.vite
+server/public
+
+# Environment
+.env
+*.env
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Tests
+server/tests

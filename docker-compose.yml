@@ -1,0 +1,17 @@
+version: "3.9"
+
+volumes:
+  server_node_modules:
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: ./server/Dockerfile
+    container_name: music-server
+    restart: always
+    env_file: ./server/.env
+    ports:
+      - "5000:5000"
+    volumes:
+      - server_node_modules:/usr/src/app/node_modules

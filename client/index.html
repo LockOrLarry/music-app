@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Jamendo Track Search</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    #searchContainer {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    #searchInput {
+      width: 300px;
+      padding: 8px;
+      font-size: 16px;
+    }
+    #searchBtn {
+      padding: 8px 16px;
+      margin-left: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #results {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .track {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+    }
+    .track span {
+      flex: 1;
+      font-weight: bold;
+    }
+    .track button {
+      padding: 6px 12px;
+      margin-left: 4px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+      font-weight: bold;
+    }
+    .original {
+      background-color: #28a745; /* green */
+    }
+    .transcode {
+      background-color: #007bff; /* blue */
+    }
+  </style>
+</head>
+<body>
+
+<div id="loginContainer">
+  <button id="loginBtn" class="authBtn login">Login</button>
+  <button id="signupBtn" class="authBtn signup">Sign Up</button>
+</div>
+
+<div id="loginModal" class="modal-bg" style="display:none;">
+  <div class="modal-content">
+    <h2>Login</h2>
+    <form id="loginForm">
+      <input type="email" id="loginEmail" placeholder="Email" required style="width:100%;margin-bottom:12px;padding:8px;">
+      <input type="password" id="loginPassword" placeholder="Password" required style="width:100%;margin-bottom:12px;padding:8px;">
+      <button type="submit" style="width:100%;padding:10px;font-weight:bold;">Login</button>
+    </form>
+    <div id="loginError" style="color:red;margin-top:12px;"></div>
+  </div>
+</div>
+<div id="signupModal" class="modal-bg" style="display:none;">
+  <div class="modal-content">
+    <h2>Sign Up</h2>
+    <form id="signupForm">
+      <input type="email" id="signupEmail" placeholder="Email" required style="width:100%;margin-bottom:12px;padding:8px;">
+      <input type="password" id="signupPassword" placeholder="Password" required style="width:100%;margin-bottom:12px;padding:8px;">
+      <button type="submit" style="width:100%;padding:10px;font-weight:bold;">Sign Up</button>
+    </form>
+    <div id="signupError" style="color:red;margin-top:12px;"></div>
+  </div>
+</div>
+
+<style>
+  #loginContainer {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    gap: 10px;
+  }
+  .authBtn {
+    padding: 8px 16px;
+    font-size: 16px;
+    border-radius: 6px;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+  }
+  .authBtn.login {
+    background: #333;
+  }
+  .authBtn.signup {
+    background: #007bff;
+  }
+  .authBtn.login:hover {
+    background: #555;
+  }
+  .authBtn.signup:hover {
+    background: #0056b3;
+  }
+  .modal-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  .modal-content {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px #0002;
+    padding: 24px;
+    margin: 40px;
+    min-width: 320px;
+  }
+  .authBtn.logout {
+    background: #dc3545;
+  }
+  .authBtn.logout:hover {
+    background: #a71d2a;
+  }
+</style>
+  <h1>Jamendo Track Search</h1>
+  <div id="searchContainer">
+    <input type="text" id="searchInput" placeholder="Enter search term..." />
+    <button id="searchBtn">Search</button>
+  </div>
+
+  <div id="results"></div>
+
+<script>
+const API_BASE = "";
+const FORMATS = ["mp3", "ogg", "wav", "flac"]; // supported formats
+
+async function searchTracks() {
+  const query = document.getElementById("searchInput").value.trim();
+  if (!query) return;
+
+  try {
+    const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error(res.statusText);
+
+    const data = await res.json();
+    const tracks = Array.isArray(data) ? data : data.results || [];
+    
+    renderTracks(tracks);
+  } catch (err) {
+    console.error("Search failed:", err);
+    document.getElementById("results").textContent = "Search failed: " + err.message;
+  }
+}
+
+function normalizeFormat(format) {
+  if (format && format.startsWith("mp3")) return "mp3";
+  return format;
+}
+
+async function renderTracks(tracks) {
+  const resultsDiv = document.getElementById("results");
+  resultsDiv.innerHTML = "";
+
+  if (!tracks || tracks.length === 0) {
+    resultsDiv.innerHTML = "<p>No tracks found</p>";
+    return;
+  }
+
+  const token = localStorage.getItem("token");
+  let favouritedIds = [];
+
+  if (token) {
+    try {
+      const res = await fetch(`/myfavourites`, {
+        headers: { "Authorization": "Bearer " + token }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Convert to integers for comparison
+        favouritedIds = (data.results || []).map(track => parseInt(track.id)).filter(id => !isNaN(id));
+      }
+    } catch (err) {
+      console.error("Could not fetch favourites:", err);
+    }
+  }
+
+  for (const track of tracks) {
+    // Skip tracks that don't have required properties
+    if (!track.id || !track.name || !track.artist_name) {
+      console.warn("Skipping invalid track:", track);
+      continue;
+    }
+
+    // Only skip tracks that explicitly forbid download
+    if (track.audiodownload_allowed === false) continue;
+
+    const trackDiv = document.createElement("div");
+    trackDiv.classList.add("track");
+
+    const title = document.createElement("span");
+    title.textContent = `${track.name} - ${track.artist_name} `;
+    trackDiv.appendChild(title);
+
+    // Determine original format
+    let originalFormat = "mp3";
+    if (track.audio) {
+      try {
+        const url = new URL(track.audio);
+        const params = new URLSearchParams(url.search);
+        originalFormat = normalizeFormat(params.get("format") || "mp3");
+      } catch {}
+    }
+
+    // Add download buttons for each format
+    FORMATS.forEach(format => {
+      const btn = document.createElement("button");
+      btn.textContent = format;
+
+      if (format === originalFormat && track.audio) {
+        btn.classList.add("original");
+        btn.onclick = async () => {
+          try {
+            const response = await fetch(track.audio);
+            if (!response.ok) throw new Error("Download failed");
+            const blob = await response.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `${track.name}.${originalFormat}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          } catch (err) {
+            console.error("Download error:", err);
+          }
+        };
+      } else if (track.id) {
+        btn.classList.add("transcode");
+        btn.onclick = async () => {
+          try {
+            const response = await fetch(`/download?trackId=${track.id}&format=${format}`);
+            if (!response.ok) throw new Error("Transcode/download failed");
+            const blob = await response.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `${track.name}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          } catch (err) {
+            console.error("Download error:", err);
+          }
+        };
+      }
+
+      trackDiv.appendChild(btn);
+    });
+
+    // Favourite / unfavourite button
+    if (token) {
+        // Convert track ID to integer for comparison
+        const trackIdInt = parseInt(track.id);
+        const isFavourited = !isNaN(trackIdInt) && favouritedIds.includes(trackIdInt);
+        
+        const favBtn = document.createElement("button");
+        favBtn.style.marginLeft = "8px";
+        favBtn.style.border = "none";
+        favBtn.style.borderRadius = "4px";
+        favBtn.style.fontWeight = "bold";
+
+        // Set initial button state
+        if (isFavourited) {
+            favBtn.textContent = "Favourited";
+            favBtn.style.background = "#dc3545";
+            favBtn.style.color = "#fff";
+        } else {
+            favBtn.textContent = "Favourite";
+            favBtn.style.background = "#ffc107";
+            favBtn.style.color = "#333";
+        }
+
+        // Use the helper function for click handling
+        favBtn.onclick = createFavouriteHandler(trackIdInt, !isFavourited);
+
+        trackDiv.appendChild(favBtn);
+        }
+
+    resultsDiv.appendChild(trackDiv);
+  }
+}
+
+// Helper function for favorite button handlers
+function createFavouriteHandler(trackId, shouldFavourite) {
+  return async function() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const endpoint = shouldFavourite ? "/favourite" : "/unfavourite";
+    
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({ trackId })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to ${shouldFavourite ? 'favourite' : 'unfavourite'}`);
+      
+      // Toggle the button state visually
+      if (shouldFavourite) {
+        this.textContent = "Favourited";
+        this.style.background = "#dc3545";
+        this.style.color = "#fff";
+      } else {
+        this.textContent = "Favourite";
+        this.style.background = "#ffc107";
+        this.style.color = "#333";
+      }
+      
+      // Update the onclick handler for the opposite action
+      this.onclick = createFavouriteHandler(trackId, !shouldFavourite);
+      
+    } catch (err) {
+      alert("Error: " + err.message);
+      console.error("Favourite error:", err);
+    }
+  };
+}
+
+// Add event listeners
+document.getElementById("searchBtn").addEventListener("click", searchTracks);
+document.getElementById("searchInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") searchTracks();
+});
+
+// Show favourites page at /favourites
+async function showFavouritesPage() {
+  history.pushState({}, "", "/myfavourites");
+  const token = localStorage.getItem("token");
+  if (!token) return;
+
+  // Hide search field and button
+  document.getElementById("searchContainer").style.display = "none";
+
+  // Change title
+  document.querySelector("h1").textContent = "Favourites";
+
+  // Hide "Favourites" button
+  let favBtn = document.getElementById("favouritesBtn");
+  if (favBtn) favBtn.style.display = "none";
+
+  // Add "Search" button top right
+  let searchBtn = document.getElementById("searchPageBtn");
+  if (!searchBtn) {
+    searchBtn = document.createElement("button");
+    searchBtn.id = "searchPageBtn";
+    searchBtn.textContent = "Search";
+    searchBtn.className = "authBtn";
+    searchBtn.style.position = "absolute";
+    searchBtn.style.top = "20px";
+    searchBtn.style.right = "20px";
+    searchBtn.style.background = "#007bff";
+    searchBtn.style.color = "#fff";
+    searchBtn.style.fontWeight = "bold";
+    searchBtn.style.borderRadius = "6px";
+    searchBtn.style.zIndex = "100";
+    document.body.appendChild(searchBtn);
+  }
+  searchBtn.style.display = "inline-block";
+  searchBtn.onclick = showSearchPage;
+
+  // Fetch favourited tracks
+  try {
+    const res = await fetch(`/myfavourites`, {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "Could not fetch favourites.");
+    }
+    const data = await res.json();
+    const favTracks = data.results || [];
+    document.getElementById("results").innerHTML = "";
+    renderTracks(favTracks);
+  } catch (err) {
+    alert("Error: " + err.message);
+    console.error("Favourites error:", err);
+  }
+}
+
+// Show search page at /
+function showSearchPage() {
+  history.pushState({}, "", "/");
+  document.getElementById("searchContainer").style.display = "flex";
+  document.querySelector("h1").textContent = "Jamendo Track Search";
+  let searchBtn = document.getElementById("searchPageBtn");
+  if (searchBtn) searchBtn.style.display = "none";
+  let favBtn = document.getElementById("favouritesBtn");
+  if (favBtn) favBtn.style.display = "inline-block";
+  document.getElementById("results").innerHTML = "";
+}
+
+// Handle browser navigation (back/forward)
+window.addEventListener("popstate", () => {
+  if (location.pathname === "/myfavourites") {
+    showFavouritesPage();
+  } else {
+    showSearchPage();
+  }
+});
+
+// Show login modal
+document.getElementById("loginBtn").onclick = function() {
+  document.getElementById("loginModal").style.display = "flex";
+};
+// Show signup modal
+document.getElementById("signupBtn").onclick = function() {
+  document.getElementById("signupModal").style.display = "flex";
+};
+
+// Hide modals when clicking outside modal content
+document.getElementById("loginModal").onclick = function(e) {
+  if (e.target === this) this.style.display = "none";
+};
+document.getElementById("signupModal").onclick = function(e) {
+  if (e.target === this) this.style.display = "none";
+};
+
+// Handle login form submission
+document.getElementById("loginForm").onsubmit = async function(e) {
+  e.preventDefault();
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
+  const errorDiv = document.getElementById("loginError");
+  errorDiv.textContent = "";
+
+  try {
+    const res = await fetch(`/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Login failed");
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("email", email);
+    document.getElementById("loginModal").style.display = "none";
+    updateAuthUI(email);
+    alert("Login successful!");
+  } catch (err) {
+    errorDiv.textContent = err.message;
+  }
+};
+
+// Handle signup form submission
+document.getElementById("signupForm").onsubmit = async function(e) {
+  e.preventDefault();
+  const email = document.getElementById("signupEmail").value;
+  const password = document.getElementById("signupPassword").value;
+  const errorDiv = document.getElementById("signupError");
+  errorDiv.textContent = "";
+
+  try {
+    const res = await fetch(`/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Signup failed");
+    document.getElementById("signupModal").style.display = "none";
+    alert("Signup successful! You can now log in.");
+  } catch (err) {
+    errorDiv.textContent = err.message;
+  }
+};
+
+// Replace buttons with user's email and a logout button after login
+function updateAuthUI(email) {
+  const container = document.getElementById("loginContainer");
+  container.innerHTML = `
+    <span style="font-weight:bold; color:#333; background:#e9ecef; padding:8px 16px; border-radius:6px;">${email}</span>
+    <button id="logoutBtn" class="authBtn logout" style="background:#dc3545; margin-left:10px;">Log Out</button>
+  `;
+  document.getElementById("logoutBtn").onclick = function() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("email");
+    restoreAuthButtons();
+    document.getElementById("favouritesBtn").style.display = "none";
+    showSearchPage();
+  };
+
+  // Add favourites button at top right
+  let favBtn = document.getElementById("favouritesBtn");
+  if (!favBtn) {
+    favBtn = document.createElement("button");
+    favBtn.id = "favouritesBtn";
+    favBtn.textContent = "Favourites";
+    favBtn.className = "authBtn";
+    favBtn.style.position = "absolute";
+    favBtn.style.top = "20px";
+    favBtn.style.right = "20px";
+    favBtn.style.background = "#ffc107";
+    favBtn.style.color = "#333";
+    favBtn.style.fontWeight = "bold";
+    favBtn.style.borderRadius = "6px";
+    favBtn.style.zIndex = "100";
+    document.body.appendChild(favBtn);
+  }
+  favBtn.style.display = "inline-block";
+  favBtn.onclick = showFavouritesPage;
+}
+
+// Restore login/signup buttons
+function restoreAuthButtons() {
+  const container = document.getElementById("loginContainer");
+  container.innerHTML = `
+    <button id="loginBtn" class="authBtn login">Login</button>
+    <button id="signupBtn" class="authBtn signup">Sign Up</button>
+  `;
+  document.getElementById("loginBtn").onclick = function() {
+    document.getElementById("loginModal").style.display = "flex";
+  };
+  document.getElementById("signupBtn").onclick = function() {
+    document.getElementById("signupModal").style.display = "flex";
+  };
+  const favBtn = document.getElementById("favouritesBtn");
+  if (favBtn) favBtn.style.display = "none";
+}
+
+// --- put this at the bottom of your client JS file ---
+document.addEventListener("DOMContentLoaded", () => {
+  // Search form submit
+  const searchForm = document.getElementById("search-form");
+  if (searchForm) {
+    searchForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const query = document.getElementById("search-input").value.trim();
+      if (!query) return;
+
+      try {
+        const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        await renderTracks(data.results || []);
+      } catch (err) {
+        console.error("Search error:", err);
+      }
+    });
+  }
+
+  // Favourites page
+  const favBtn = document.getElementById("show-favourites");
+  if (favBtn) {
+    favBtn.addEventListener("click", async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return alert("Login first");
+
+        const res = await fetch(`/myfavourites`, {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        await renderTracks(data.results || []);
+      } catch (err) {
+        console.error("Error loading favourites:", err);
+      }
+    });
+  }
+
+  // Logout
+  const logoutBtn = document.getElementById("logout");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("token");
+      location.reload();
+    });
+  }
+
+  // Auto-load favourites if on favourites page
+  if (window.location.pathname === "/favourites") {
+    favBtn?.click();
+  }
+});
+
+</script>
+</body>
+</html>
