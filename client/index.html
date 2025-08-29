@@ -536,6 +536,66 @@ function updateAuthUI(email) {
   }
   favBtn.style.display = "inline-block";
   favBtn.onclick = showFavouritesPage;
+  addDownloadAllFlacButton();
+}
+
+function addDownloadAllFlacButton() {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+
+  let downloadAllBtn = document.getElementById("downloadAllFlacBtn");
+  if (!downloadAllBtn) {
+    downloadAllBtn = document.createElement("button");
+    downloadAllBtn.id = "downloadAllFlacBtn";
+    downloadAllBtn.textContent = "Download All FLAC";
+    downloadAllBtn.className = "authBtn";
+    downloadAllBtn.style.position = "absolute";
+    downloadAllBtn.style.top = "20px";
+    downloadAllBtn.style.background = "#28a745";
+    downloadAllBtn.style.color = "#fff";
+    downloadAllBtn.style.fontWeight = "bold";
+    downloadAllBtn.style.borderRadius = "6px";
+    downloadAllBtn.style.zIndex = "100";
+    document.body.appendChild(downloadAllBtn);
+
+    downloadAllBtn.onclick = async () => {
+      try {
+        const res = await fetch(`/myfavourites`, {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        if (!res.ok) throw new Error("Failed to fetch favourites");
+        const favTracks = (await res.json()).results || [];
+
+        favTracks.forEach(track => {
+          if (!track.id || !track.name) return;
+          fetch(`/download?trackId=${track.id}&format=flac`)
+            .then(r => r.blob())
+            .then(blob => {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `${track.name}.flac`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+            })
+            .catch(err => console.error(`Download failed for ${track.name}:`, err));
+        });
+      } catch (err) {
+        alert("Error: " + err.message);
+      }
+    };
+  }
+
+  // Position relative to favourites button
+  const favBtn = document.getElementById("favouritesBtn");
+  if (favBtn) {
+    const rect = favBtn.getBoundingClientRect();
+    downloadAllBtn.style.right = `${window.innerWidth - rect.left + 10}px`;
+  } else {
+    downloadAllBtn.style.right = "20px";
+  }
+
+  downloadAllBtn.style.display = "inline-block";
 }
 
 // Restore login/signup buttons
