@@ -11,12 +11,12 @@ async function searchTracks(query) {
   return res.data.results;
 }
 
-async function canDownloadTrack(trackId) {
-  const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&id=${trackId}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.results[0]?.audiodownload_allowed === true;
-}
+// async function canDownloadTrack(trackId) {
+//   const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&id=${trackId}`;
+//   const res = await fetch(url);
+//   const data = await res.json();
+//   return data.results[0]?.audiodownload_allowed === true;
+// }
 
 
 // Get stream URL (direct link)
