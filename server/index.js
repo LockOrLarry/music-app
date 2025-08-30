@@ -57,13 +57,6 @@
     });
   }
 
-  app.get("/profile", authenticateToken, (req, res) => {
-    db.get("SELECT id, email FROM users WHERE id = ?", [req.user.id], (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(row);
-    });
-  });
-
   app.get("/search", async (req, res) => {
     try {
       const query = req.query.q || "";
