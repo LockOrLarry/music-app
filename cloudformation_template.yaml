@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A music search application using a prebuilt Docker AMI.
+
+Parameters:
+  # EC2 Key Pair for SSH access
+  KeyName:
+    Description: Name of an existing EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: n11399589
+
+Resources:
+  MusicServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0e25e0874539dd125
+      IamInstanceProfile: CAB432-Instance-Role
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: subnet-04ca053dcbe5f49cc
+          AssociatePublicIpAddress: true
+          GroupSet:
+            - sg-032bd1ff8cf77dbb9
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -xe
+          # Log in to ECR
+          aws ecr get-login-password --region ap-southeast-2 \
+            | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
+          # Pull and run container
+          docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
+          docker run -d -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
+
+Outputs:
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref MusicServerInstance
+  PublicIP:
+    Description: Public IP of the EC2 instance
+    Value: !GetAtt MusicServerInstance.PublicIp
