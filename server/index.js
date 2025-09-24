@@ -212,13 +212,13 @@ app.post('/favourite', checkAuth, async (req, res) => {
 
 // Serve SPA
 // Serve SPA static files
-app.use(express.static(path.join(__dirname, "client")));
+app.use(express.static(path.join(__dirname, "client/dist")));
 
 // Explicit SPA routes
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
     app.get(route, (req, res) => {
-        res.sendFile(path.join(__dirname, "client", "index.html"));
+        res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
 
