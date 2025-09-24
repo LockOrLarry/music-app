@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A music search application using a prebuilt Docker AMI and AWS
-  Cognito for authentication.
+Description: A music search application using a prebuilt Docker AMI.
 
 Parameters:
   KeyName:
@@ -30,28 +29,6 @@ Resources:
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
           docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
           docker run -d -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
-  MyUserPool:
-    Type: AWS::Cognito::UserPool
-    Properties:
-      UserPoolName: n11399589-assignment
-      Schema:
-        - Name: email
-          Required: true
-          Mutable: true
-      AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: false
-      AutoVerifiedAttributes:
-        - email
-
-  MyUserPoolClient:
-    Type: AWS::Cognito::UserPoolClient
-    Properties:
-      ClientName: n11399589-assignment-client
-      UserPoolId: !Ref MyUserPool
-      GenerateSecret: true
-      ExplicitAuthFlows:
-        - ALLOW_USER_PASSWORD_AUTH
-        - ALLOW_REFRESH_TOKEN_AUTH
 
 Outputs:
   InstanceId:
@@ -60,13 +37,3 @@ Outputs:
   PublicIP:
     Description: Public IP of the EC2 instance
     Value: !GetAtt MusicServerInstance.PublicIp
-  UserPoolId:
-    Description: Cognito User Pool ID
-    Value: !Ref MyUserPool
-  UserPoolClientId:
-    Description: Cognito App Client ID
-    Value: !Ref MyUserPoolClient
-  UserPoolClientSecret:
-    Description: Cognito App Client Secret
-
-    Value: !GetAtt MyUserPoolClient.ClientSecret
