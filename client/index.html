@@ -69,7 +69,7 @@ function setAuthUI(isAuthenticated, userInfo) {
     document.getElementById("downloadAllFlacBtn").onclick = downloadAllFlac;
   } else {
     container.innerHTML = `<button id="oidcLoginBtn" class="authBtn">Login with OIDC</button>`;
-    document.getElementById("oidcLoginBtn").onclick = () => { window.location="/auth/oidc/login"; };
+    document.getElementById("oidcLoginBtn").onclick = () => { window.location="/login"; };
   }
 }
 
