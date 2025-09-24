@@ -33,7 +33,7 @@ Resources:
   MyUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: n11399589-prac
+      UserPoolName: n11399589-assignment
       Schema:
         - Name: email
           Required: true
@@ -42,7 +42,7 @@ Resources:
   MyUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: n11399589-prac-client
+      ClientName: n11399589-assignment-client
       UserPoolId: !Ref MyUserPool
       GenerateSecret: true
       ExplicitAuthFlows:
@@ -66,3 +66,4 @@ Outputs:
     Description: Cognito App Client Secret
 
     Value: !GetAtt MyUserPoolClient.ClientSecret
+
