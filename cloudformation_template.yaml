@@ -1,5 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A music search application using a prebuilt Docker AMI and AWS Cognito for authentication.
+Description: A music search application using a prebuilt Docker AMI and AWS
+  Cognito for authentication.
 
 Parameters:
   KeyName:
@@ -29,7 +30,6 @@ Resources:
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
           docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
           docker run -d -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
-
   MyUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -38,6 +38,10 @@ Resources:
         - Name: email
           Required: true
           Mutable: true
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+        - email
 
   MyUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
@@ -66,4 +70,3 @@ Outputs:
     Description: Cognito App Client Secret
 
     Value: !GetAtt MyUserPoolClient.ClientSecret
-
