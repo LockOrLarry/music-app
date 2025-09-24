@@ -17,42 +17,77 @@
   const CLIENT_ID = process.env.JAMENDO_CLIENT_ID;
   const JWT_SECRET = process.env.JWT_SECRET;
 
-  app.post("/register", (req, res) => {
+  const {
+    CognitoIdentityProviderClient,
+    SignUpCommand
+  } = require("@aws-sdk/client-cognito-identity-provider");
+
+  const cognito = new CognitoIdentityProviderClient({ region: "ap-southeast-2" });
+
+  app.post("/register", async (req, res) => {
     const { email, password } = req.body;
-    db.run(
-      "INSERT INTO users (email, password) VALUES (?, ?)",
-      [email, password],
-      function (err) {
-        if (err) return res.status(400).json({ error: "User already exists" });
-        res.json({ id: this.lastID, email });
-      }
-    );
+
+    try {
+      await cognito.send(new SignUpCommand({
+        ClientId: process.env.COGNITO_CLIENT_ID,
+        Username: email,
+        Password: password,
+        UserAttributes: [
+          { Name: "email", Value: email }
+        ]
+      }));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Cognito signup error:", err);
+      res.status(400).json({ error: err.message });
+    }
   });
 
-  app.post("/login", (req, res) => {
-    const { email, password } = req.body;
-    db.get(
-      "SELECT * FROM users WHERE email = ? AND password = ?",
-      [email, password],
-      (err, user) => {
-        if (err || !user) return res.status(401).json({ error: "Invalid login" });
+  const { InitiateAuthCommand } = require("@aws-sdk/client-cognito-identity-provider");
 
-        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-          expiresIn: "1h",
-        });
-        res.json({ token });
-      }
-    );
+  app.post("/login", async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+      const authRes = await cognito.send(new InitiateAuthCommand({
+        AuthFlow: "USER_PASSWORD_AUTH",
+        ClientId: process.env.COGNITO_CLIENT_ID,
+        AuthParameters: {
+          USERNAME: email,
+          PASSWORD: password
+        }
+      }));
+
+      res.json({
+        idToken: authRes.AuthenticationResult.IdToken,
+        accessToken: authRes.AuthenticationResult.AccessToken
+      });
+    } catch (err) {
+      console.error("Cognito login error:", err);
+      res.status(401).json({ error: "Invalid login" });
+    }
   });
+
+  const jwksClient = require("jwks-rsa");
+
+  const client = jwksClient({
+    jwksUri: `https://cognito-idp.ap-southeast-2.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+  });
+
+  function getKey(header, callback) {
+    client.getSigningKey(header.kid, (err, key) => {
+      const signingKey = key.getPublicKey();
+      callback(null, signingKey);
+    });
+  }
 
   function authenticateToken(req, res, next) {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
+    const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.sendStatus(401);
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, getKey, {}, (err, decoded) => {
       if (err) return res.sendStatus(403);
-      req.user = user;
+      req.user = decoded;
       next();
     });
   }
@@ -66,7 +101,7 @@
         const token = req.headers.authorization.split(" ")[1];
         try {
           const user = jwt.verify(token, JWT_SECRET);
-          db.run("INSERT INTO searches (user_id, query) VALUES (?, ?)", [user.id, query]);
+          db.run("INSERT INTO searches (user_id, query) VALUES (?, ?)", [req.user.sub, query]);
         } catch {
           console.log("Token invalid, skipping DB log");
         }
@@ -122,7 +157,7 @@
       return res.status(400).json({ error: "Invalid trackId" });
     }
 
-    db.run("INSERT INTO favourites (user_id, track_id) VALUES (?, ?)", [req.user.id, trackIdInt], function (err) {
+    db.run("INSERT INTO favourites (user_id, track_id) VALUES (?, ?)", [req.user.sub, trackIdInt], function (err) {
       if (err) {
         console.error("Favourite error:", err);
         return res.status(400).json({ error: "Already favourited or DB error" });
@@ -141,7 +176,7 @@
       return res.status(400).json({ error: "Invalid trackId" });
     }
 
-    db.run("DELETE FROM favourites WHERE user_id = ? AND track_id = ?", [req.user.id, trackIdInt], function (err) {
+    db.run("DELETE FROM favourites WHERE user_id = ? AND track_id = ?", [req.user.sub, trackIdInt], function (err) {
       if (err) {
         console.error("Unfavourite error:", err);
         return res.status(400).json({ error: "DB error" });
@@ -152,7 +187,7 @@
 
   app.get('/myfavourites', authenticateToken, async (req, res) => {
 
-    db.all("SELECT track_id FROM favourites WHERE user_id = ?", [req.user.id], async (err, rows) => {
+    db.all("SELECT track_id FROM favourites WHERE user_id = ?", [req.user.sub], async (err, rows) => {
       if (err) {
         console.error("DB error:", err);
         return res.status(500).json({ error: err.message });

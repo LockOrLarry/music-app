@@ -1,8 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A music search application using a prebuilt Docker AMI.
+Description: A music search application using a prebuilt Docker AMI and AWS Cognito for authentication.
 
 Parameters:
-  # EC2 Key Pair for SSH access
   KeyName:
     Description: Name of an existing EC2 KeyPair
     Type: AWS::EC2::KeyPair::KeyName
@@ -26,12 +25,29 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -xe
-          # Log in to ECR
           aws ecr get-login-password --region ap-southeast-2 \
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
-          # Pull and run container
           docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
           docker run -d -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
+
+  MyUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: n1234567-prac
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+
+  MyUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: n1234567-prac-client
+      UserPoolId: !Ref MyUserPool
+      GenerateSecret: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
 
 Outputs:
   InstanceId:
@@ -40,3 +56,12 @@ Outputs:
   PublicIP:
     Description: Public IP of the EC2 instance
     Value: !GetAtt MusicServerInstance.PublicIp
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref MyUserPool
+  UserPoolClientId:
+    Description: Cognito App Client ID
+    Value: !Ref MyUserPoolClient
+  UserPoolClientSecret:
+    Description: Cognito App Client Secret
+    Value: !GetAtt MyUserPoolClient.ClientSecret

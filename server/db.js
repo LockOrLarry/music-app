@@ -4,14 +4,6 @@ const db = new sqlite3.Database("./musicapp.db");
 // Create tables if not exist
 db.serialize(() => {
   db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL
-    )
-  `);
-
-  db.run(`
   CREATE TABLE IF NOT EXISTS favourites (
     user_id INTEGER NOT NULL,
     track_id INTEGER NOT NULL,
