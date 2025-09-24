@@ -23,6 +23,17 @@
   } = require("@aws-sdk/client-cognito-identity-provider");
 
   const cognito = new CognitoIdentityProviderClient({ region: "ap-southeast-2" });
+  
+  const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+  const {
+    PutItemCommand,
+    DeleteItemCommand,
+    QueryCommand
+  } = require("@aws-sdk/client-dynamodb");
+
+  const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
+  const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
+  const SEARCHES_TABLE = process.env.DYNAMO_SEARCHES_TABLE;
 
   app.post("/register", async (req, res) => {
     const { email, password } = req.body;
@@ -147,7 +158,7 @@
     }
   });
 
-  app.post("/favourite", authenticateToken, (req, res) => {
+  app.post("/favourite", authenticateToken, async (req, res) => {
     const { trackId } = req.body;
     
     if (!trackId) return res.status(400).json({ error: "Missing trackId" });
@@ -157,16 +168,17 @@
       return res.status(400).json({ error: "Invalid trackId" });
     }
 
-    db.run("INSERT INTO favourites (user_id, track_id) VALUES (?, ?)", [req.user.sub, trackIdInt], function (err) {
-      if (err) {
-        console.error("Favourite error:", err);
-        return res.status(400).json({ error: "Already favourited or DB error" });
-      }
-      res.json({ success: true });
-    });
+    await dynamo.send(new PutItemCommand({
+    TableName: FAVOURITES_TABLE,
+    Item: {
+      user_id: { S: req.user.sub },
+      track_id: { N: trackIdInt.toString() }
+    }
+  }));
+  res.json({ success: true });
   });
 
-  app.post("/unfavourite", authenticateToken, (req, res) => {
+  app.post("/unfavourite", authenticateToken, async (req, res) => {
     const { trackId } = req.body;
     
     if (!trackId) return res.status(400).json({ error: "Missing trackId" });
@@ -176,57 +188,53 @@
       return res.status(400).json({ error: "Invalid trackId" });
     }
 
-    db.run("DELETE FROM favourites WHERE user_id = ? AND track_id = ?", [req.user.sub, trackIdInt], function (err) {
-      if (err) {
-        console.error("Unfavourite error:", err);
-        return res.status(400).json({ error: "DB error" });
-      }
-      res.json({ success: true });
-    });
+    await dynamo.send(new DeleteItemCommand({
+    TableName: FAVOURITES_TABLE,
+    Key: {
+      user_id: { S: req.user.sub },
+      track_id: { N: trackIdInt.toString() }
+    }
+    }));
+    res.json({ success: true });
   });
 
   app.get('/myfavourites', authenticateToken, async (req, res) => {
-
-    db.all("SELECT track_id FROM favourites WHERE user_id = ?", [req.user.sub], async (err, rows) => {
-      if (err) {
-        console.error("DB error:", err);
-        return res.status(500).json({ error: err.message });
+  try {
+    const favRes = await dynamo.send(new QueryCommand({
+      TableName: FAVOURITES_TABLE,
+      KeyConditionExpression: "user_id = :uid",
+      ExpressionAttributeValues: {
+        ":uid": { S: req.user.sub }
       }
+    }));
 
-      const trackIds = rows.map(r => parseInt(r.track_id)).filter(id => !isNaN(id));
-      
-      if (!trackIds.length) return res.json({ results: [] });
+    const trackIds = favRes.Items.map(item => parseInt(item.track_id.N)).filter(id => !isNaN(id));
+    if (!trackIds.length) return res.json({ results: [] });
 
+    const trackPromises = trackIds.map(async (trackId) => {
       try {
-        const trackPromises = trackIds.map(async (trackId) => {
-          try {
-            const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&format=json&id=${trackId}`;
-            
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data.results && data.results.length > 0) {
-              return data.results[0];
-            }
-            return null;
-          } catch (err) {
-            console.error(`Error fetching track ${trackId}:`, err);
-            return null;
-          }
-        });
-
-        const trackResults = await Promise.all(trackPromises);
-        
-        const results = trackResults.filter(track => track !== null)
-                                  .map(track => ({ ...track, id: parseInt(track.id) }));
-        
-        res.json({ results });
-        
+        const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&format=json&id=${trackId}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+          return data.results[0];
+        }
+        return null;
       } catch (err) {
-        console.error("Jamendo fetch error:", err);
-        res.status(500).json({ error: "Failed to fetch tracks" });
+        console.error(`Error fetching track ${trackId}:`, err);
+        return null;
       }
     });
+
+    const trackResults = await Promise.all(trackPromises);
+    const results = trackResults.filter(track => track !== null)
+                                .map(track => ({ ...track, id: parseInt(track.id) }));
+
+    res.json({ results });
+  } catch (err) {
+    console.error("DynamoDB query error:", err);
+    res.status(500).json({ error: "Failed to fetch favourites" });
+  }
   });
 
   app.use(express.static(path.join(__dirname, "client/dist")));
