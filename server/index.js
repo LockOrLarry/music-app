@@ -136,7 +136,6 @@ app.get('/download/:id', checkAuth, async (req, res) => {
     }
 });
 
-  app.post("/favourite", authenticateToken, async (req, res) => {
 // Download all FLAC
 app.get('/download/all', checkAuth, async (req, res) => {
     // Optional: could fetch all favourites or all search results for this user
@@ -144,7 +143,7 @@ app.get('/download/all', checkAuth, async (req, res) => {
 });
 
 // Favourites
-app.post('/favourite', checkAuth, (req, res) => {
+app.post('/favourite', checkAuth, async (req, res) => {
     const { trackId } = req.body;
     if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
 
