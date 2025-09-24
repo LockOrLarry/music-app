@@ -157,7 +157,7 @@ app.post('/favourite', checkAuth, async (req, res) => {
   res.json({ success: true });
   });
 
-  app.post("/unfavourite", authenticateToken, async (req, res) => {
+  app.post("/unfavourite", checkAuth, async (req, res) => {
     const { trackId } = req.body;
     if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
 
@@ -171,7 +171,7 @@ app.post('/favourite', checkAuth, async (req, res) => {
     res.json({ success: true });
   });
 
-  app.get('/myfavourites', authenticateToken, async (req, res) => {
+  app.get('/myfavourites', checkAuth, async (req, res) => {
   try {
     const favRes = await dynamo.send(new QueryCommand({
       TableName: FAVOURITES_TABLE,
