@@ -24,9 +24,7 @@
 </head>
 <body>
 
-<div id="loginContainer">
-  <button id="oidcLoginBtn" class="authBtn">Login with OIDC</button>
-</div>
+<div id="loginContainer"></div>
 
 <h1>Jamendo Track Search</h1>
 <div id="searchContainer">
@@ -38,27 +36,31 @@
 
 <script>
 const FORMATS = ["mp3", "ogg", "wav", "flac"];
+let isAuthenticated = false;
+let userInfo = {};
 
 async function getAuthState() {
   try {
     const res = await fetch("/userinfo");
     if (!res.ok) throw new Error("Not authenticated");
     const data = await res.json();
-    setAuthUI(true, data.userInfo || {});
-    return true;
+    isAuthenticated = data.isAuthenticated;
+    userInfo = data.userInfo || {};
+    setAuthUI(isAuthenticated, userInfo);
   } catch {
+    isAuthenticated = false;
+    userInfo = {};
     setAuthUI(false, {});
-    return false;
   }
 }
 
-function setAuthUI(isAuthenticated, userInfo) {
+function setAuthUI(auth, info) {
   const container = document.getElementById("loginContainer");
   container.innerHTML = "";
-  if (isAuthenticated) {
+  if (auth) {
     container.innerHTML = `
       <span style="font-weight:bold; color:#333; background:#e9ecef; padding:8px 16px; border-radius:6px;">
-        ${userInfo.name || userInfo.email || "User"}
+        ${info.name || info.email || "User"}
       </span>
       <button id="logoutBtn" class="authBtn logout">Log Out</button>
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
@@ -89,78 +91,97 @@ async function searchTracks() {
 async function renderTracks(tracks) {
   const resultsDiv = document.getElementById("results");
   resultsDiv.innerHTML = "";
-  if (!tracks || tracks.length===0){resultsDiv.innerHTML="<p>No tracks found</p>"; return;}
-  
-  let favouritedIds=[];
-  const isAuthenticated = await getAuthState();
-  if(isAuthenticated){
+  if (!tracks || tracks.length === 0) {
+    resultsDiv.innerHTML = "<p>No tracks found</p>";
+    return;
+  }
+
+  let favouritedIds = [];
+  if (isAuthenticated) {
     try {
       const res = await fetch("/myfavourites");
-      if(res.ok){const data=await res.json(); favouritedIds=(data.results||[]).map(t=>t.id);}
-    } catch{}
+      if (res.ok) {
+        const data = await res.json();
+        favouritedIds = (data.results || []).map(t => t.id);
+      }
+    } catch {}
   }
 
   tracks.forEach(track => {
-    if(!track.id || !track.name || !track.artist_name) return;
-    if(track.audiodownload_allowed===false) return;
-    
-    const trackDiv=document.createElement("div");
+    if (!track.id || !track.name || !track.artist_name) return;
+    if (track.audiodownload_allowed === false) return;
+
+    const trackDiv = document.createElement("div");
     trackDiv.classList.add("track");
-    
-    const title=document.createElement("span");
-    title.textContent=`${track.name} - ${track.artist_name} `;
+
+    const title = document.createElement("span");
+    title.textContent = `${track.name} - ${track.artist_name} `;
     trackDiv.appendChild(title);
-    
-    FORMATS.forEach(format=>{
-      const btn=document.createElement("button");
-      btn.textContent=`Download ${format.toUpperCase()}`;
-      btn.className=(format==="mp3"?"original":"transcode");
-      btn.onclick=()=>window.location=`/download/${track.id}?format=${format}`;
+
+    FORMATS.forEach(format => {
+      const btn = document.createElement("button");
+      btn.textContent = `Download ${format.toUpperCase()}`;
+      btn.className = (format === "mp3" ? "original" : "transcode");
+      btn.onclick = () => window.location = `/download/${track.id}?format=${format}`;
       trackDiv.appendChild(btn);
     });
-    
-    if(isAuthenticated){
-      const favBtn=document.createElement("button");
-      favBtn.textContent=favouritedIds.includes(track.id)?"Unfavourite":"Favourite";
-      favBtn.className="authBtn";
-      favBtn.onclick=async ()=>{
-        const endpoint=favouritedIds.includes(track.id)?"/unfavourite":"/favourite";
-        await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trackId:track.id})});
+
+    if (isAuthenticated) {
+      const favBtn = document.createElement("button");
+      favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
+      favBtn.className = "authBtn";
+      favBtn.onclick = async () => {
+        const endpoint = favouritedIds.includes(track.id) ? "/unfavourite" : "/favourite";
+        await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trackId: track.id }) });
         renderTracks(tracks);
       };
       trackDiv.appendChild(favBtn);
     }
-    
+
     resultsDiv.appendChild(trackDiv);
   });
 }
 
-async function showFavouritesPage(){
-  history.pushState({},"","/myfavourites");
-  document.getElementById("searchContainer").style.display="none";
-  document.querySelector("h1").textContent="Favourites";
-  try{
-    const res=await fetch("/myfavourites");
-    const data=await res.json();
-    renderTracks(data.results||[]);
-  } catch(err){document.getElementById("results").textContent="Error: "+err.message;}
+async function showFavouritesPage() {
+  history.pushState({}, "", "/myfavourites");
+  document.getElementById("searchContainer").style.display = "none";
+  document.querySelector("h1").textContent = "Favourites";
+  try {
+    const res = await fetch("/myfavourites");
+    const data = await res.json();
+    renderTracks(data.results || []);
+  } catch (err) {
+    document.getElementById("results").textContent = "Error: " + err.message;
+  }
 }
 
-function showSearchPage(){
-  history.pushState({},"","/");
-  document.getElementById("searchContainer").style.display="flex";
-  document.querySelector("h1").textContent="Jamendo Track Search";
-  document.getElementById("results").innerHTML="";
+function showSearchPage() {
+  history.pushState({}, "", "/");
+  document.getElementById("searchContainer").style.display = "flex";
+  document.querySelector("h1").textContent = "Jamendo Track Search";
+  document.getElementById("results").innerHTML = "";
 }
 
-function downloadAllFlac(){
-  window.location="/download/all?format=flac";
+function downloadAllFlac() {
+  fetch("/myfavourites")
+    .then(res => res.json())
+    .then(data => {
+      const tracks = data.results || [];
+      tracks.forEach(track => {
+        const a = document.createElement("a");
+        a.href = `/download/${track.id}?format=flac`;
+        a.download = `${track.name || track.id}.flac`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+    });
 }
 
-window.addEventListener("popstate",()=>{location.pathname==="/myfavourites"?showFavouritesPage():showSearchPage();});
-document.getElementById("searchBtn").addEventListener("click",searchTracks);
-document.getElementById("searchInput").addEventListener("keydown",e=>{if(e.key==="Enter") searchTracks();});
-document.addEventListener("DOMContentLoaded",()=>{getAuthState();});
+window.addEventListener("popstate", () => { location.pathname === "/myfavourites" ? showFavouritesPage() : showSearchPage(); });
+document.getElementById("searchBtn").addEventListener("click", searchTracks);
+document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchTracks(); });
+document.addEventListener("DOMContentLoaded", () => { getAuthState(); });
 </script>
 </body>
 </html>

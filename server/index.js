@@ -137,47 +137,49 @@ app.get('/download/:id', checkAuth, async (req, res) => {
 });
 
 // Download all FLAC
-app.get('/download/all', checkAuth, async (req, res) => {
-    // Optional: could fetch all favourites or all search results for this user
-    res.send('Download all FLAC tracks'); 
-});
+// app.get('/download/all', checkAuth, async (req, res) => {
+//     // Optional: could fetch all favourites or all search results for this user
+//     res.send('Download all FLAC tracks'); 
+// });
 
 // Favourites
 app.post('/favourite', checkAuth, async (req, res) => {
-    const { trackId } = req.body;
-    if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
+  if (!req.isAuthenticated) return res.status(401).json({ error: 'Not logged in' });
+  const { trackId } = req.body;
+  if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
 
-    await dynamo.send(new PutItemCommand({
+  await dynamo.send(new PutItemCommand({
     TableName: FAVOURITES_TABLE,
     Item: {
-      user_id: { S: req.user.sub },
-      track_id: { N: trackIdInt.toString() }
+      user_id: { S: req.session.userInfo.sub },
+      track_id: { N: String(trackId) }
+    }
+  }));
+
+  res.json({ success: true });
+});
+
+app.post("/unfavourite", checkAuth, async (req, res) => {
+  const { trackId } = req.body;
+  if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
+
+  await dynamo.send(new DeleteItemCommand({
+    TableName: FAVOURITES_TABLE,
+    Key: {
+      user_id: { S: req.session.userInfo.sub },
+      track_id: { N: String(trackId) }
     }
   }));
   res.json({ success: true });
-  });
+});
 
-  app.post("/unfavourite", checkAuth, async (req, res) => {
-    const { trackId } = req.body;
-    if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
-
-    await dynamo.send(new DeleteItemCommand({
-    TableName: FAVOURITES_TABLE,
-    Key: {
-      user_id: { S: req.user.sub },
-      track_id: { N: trackIdInt.toString() }
-    }
-    }));
-    res.json({ success: true });
-  });
-
-  app.get('/myfavourites', checkAuth, async (req, res) => {
+app.get('/myfavourites', checkAuth, async (req, res) => {
   try {
     const favRes = await dynamo.send(new QueryCommand({
       TableName: FAVOURITES_TABLE,
       KeyConditionExpression: "user_id = :uid",
       ExpressionAttributeValues: {
-        ":uid": { S: req.user.sub }
+        ":uid": { S: req.session.userInfo.sub }
       }
     }));
 
@@ -208,7 +210,7 @@ app.post('/favourite', checkAuth, async (req, res) => {
     console.error("DynamoDB query error:", err);
     res.status(500).json({ error: "Failed to fetch favourites" });
   }
-  });
+});
 
 // Serve SPA
 // Serve SPA static files
