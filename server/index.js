@@ -9,6 +9,10 @@ const { transcodeBuffer } = require('./routes/ffmpeg');
 const db = require('./db');
 const { searchTracks } = require('./routes/jamendo');
 
+const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
+const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
+const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
+
 const app = express();
 let client;
 
