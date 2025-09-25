@@ -16,13 +16,13 @@ const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
 const app = express();
 let client;
 
-// Initialize OpenID Client
+// --- Initialize OpenID Client ---
 async function initializeClient() {
     const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
     client = new issuer.Client({
         client_id: process.env.COGNITO_CLIENT_ID,
         client_secret: process.env.COGNITO_CLIENT_SECRET,
-        redirect_uris: [process.env.REDIRECT_URI || 'http://localhost:5000/callback'],
+        redirect_uris: [process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000/callback'],
         response_types: ['code']
     });
 }
@@ -58,7 +58,7 @@ app.get('/callback', async (req, res) => {
     try {
         const params = client.callbackParams(req);
         const tokenSet = await client.callback(
-            process.env.REDIRECT_URI || 'http://localhost:5000/callback',
+            process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000/callback',
             params,
             { nonce: req.session.nonce, state: req.session.state }
         );
@@ -73,7 +73,7 @@ app.get('/callback', async (req, res) => {
 
 app.get('/logout', (req, res) => {
     req.session.destroy(() => {
-        const logoutUrl = `https://ap-southeast-2_k6WMVcixi.auth.ap-southeast-2.amazoncognito.com/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(process.env.REDIRECT_URI || 'http://localhost:5000')}`;
+        const logoutUrl = `https://ap-southeast-2_k6WMVcixi.auth.ap-southeast-2.amazoncognito.com/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000')}`;
         res.redirect(logoutUrl);
     });
 });
@@ -90,7 +90,7 @@ app.get('/userinfo', checkAuth, (req, res) => {
 const CLIENT_ID = process.env.JAMENDO_CLIENT_ID;
 
 // Search tracks
-app.get('/search', async (req, res) => {
+app.get('/search', checkAuth, async (req, res) => {
     try {
         const query = req.query.q || '';
         const results = await searchTracks(query);
@@ -139,12 +139,6 @@ app.get('/download/:id', checkAuth, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-// Download all FLAC
-// app.get('/download/all', checkAuth, async (req, res) => {
-//     // Optional: could fetch all favourites or all search results for this user
-//     res.send('Download all FLAC tracks'); 
-// });
 
 // Favourites
 app.post('/favourite', checkAuth, async (req, res) => {
@@ -217,7 +211,6 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
 });
 
 // Serve SPA
-// Serve SPA static files
 app.use(express.static(path.join(__dirname, "client/dist")));
 
 // Explicit SPA routes
@@ -227,7 +220,6 @@ spaRoutes.forEach(route => {
         res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
