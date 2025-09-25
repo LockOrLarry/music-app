@@ -22,7 +22,7 @@ async function initializeClient() {
     client = new issuer.Client({
         client_id: process.env.COGNITO_CLIENT_ID,
         client_secret: process.env.COGNITO_CLIENT_SECRET,
-        redirect_uris: [process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000/callback'],
+        redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com:5000/callback'],
         response_types: ['code']
     });
 }

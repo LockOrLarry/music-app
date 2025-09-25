@@ -25,11 +25,50 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -xe
+
+          # Install Node, Docker, Nginx, OpenSSL
+          apt update
+          apt install -y docker.io nginx openssl
+
+          # Start Docker and pull your app
+          systemctl enable docker
+          systemctl start docker
           aws ecr get-login-password --region ap-southeast-2 \
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
           docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
           docker run -d -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
 
+          # Create self-signed certificate
+          mkdir -p /etc/ssl/selfsigned
+          openssl req -x509 -nodes -days 365 \
+            -subj "/CN=jamapp.cab432.com" \
+            -newkey rsa:2048 \
+            -keyout /etc/ssl/selfsigned/selfsigned.key \
+            -out /etc/ssl/selfsigned/selfsigned.crt
+
+          # Configure Nginx to reverse proxy HTTPS
+          cat > /etc/nginx/sites-available/jamapp <<'EOF'
+          server {
+              listen 443 ssl;
+              server_name jamapp.cab432.com;
+
+              ssl_certificate /etc/ssl/selfsigned/selfsigned.crt;
+              ssl_certificate_key /etc/ssl/selfsigned/selfsigned.key;
+
+              location / {
+                  proxy_pass http://127.0.0.1:5000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+              }
+          }
+          EOF
+
+          ln -sf /etc/nginx/sites-available/jamapp /etc/nginx/sites-enabled/jamapp
+          nginx -t
+          systemctl restart nginx
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
