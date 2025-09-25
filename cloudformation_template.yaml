@@ -26,21 +26,22 @@ Resources:
           #!/bin/bash
           set -xe
 
-          # Install Node, Docker, Nginx, OpenSSL
+          # Only update and install what's needed (no docker)
           apt-get update -y
-          apt-get install -y docker.io nginx openssl
+          apt-get install -y nginx openssl
 
-          # Start Docker
+          # Start Docker (if not already running)
           systemctl enable docker
           systemctl start docker
 
-          # Pull and run your app
+          # Pull and run app
           aws ecr get-login-password --region ap-southeast-2 \
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
           docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
+          docker rm -f music-server || true
           docker run -d --restart unless-stopped -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
 
-          # Create self-signed certificate
+          # Create self-signed cert
           mkdir -p /etc/ssl/selfsigned
           openssl req -x509 -nodes -days 365 \
             -subj "/CN=jamapp.cab432.com" \
@@ -48,29 +49,27 @@ Resources:
             -keyout /etc/ssl/selfsigned/selfsigned.key \
             -out /etc/ssl/selfsigned/selfsigned.crt
 
-          # Configure Nginx (no leading spaces)
-          cat > /etc/nginx/sites-available/jamapp <<'EOF'
-server {
-    listen 443 ssl;
-    server_name jamapp.cab432.com;
+          # Write Nginx config using echo
+          echo 'server {
+              listen 443 ssl;
+              server_name jamapp.cab432.com;
 
-    ssl_certificate /etc/ssl/selfsigned/selfsigned.crt;
-    ssl_certificate_key /etc/ssl/selfsigned/selfsigned.key;
+              ssl_certificate /etc/ssl/selfsigned/selfsigned.crt;
+              ssl_certificate_key /etc/ssl/selfsigned/selfsigned.key;
 
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-EOF
+              location / {
+                  proxy_pass http://127.0.0.1:5000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+              }
+          }' > /etc/nginx/sites-available/jamapp
 
           # Enable site and restart Nginx
           ln -sf /etc/nginx/sites-available/jamapp /etc/nginx/sites-enabled/jamapp
-          rm -f /etc/nginx/sites-enabled/default   # remove default site
+          rm -f /etc/nginx/sites-enabled/default
           nginx -t
           systemctl enable nginx
           systemctl restart nginx
