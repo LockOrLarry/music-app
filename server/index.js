@@ -12,6 +12,7 @@ const { searchTracks } = require('./routes/jamendo');
 const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
 const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
+const PORT = process.env.PORT || 5000;
 
 const app = express();
 let client;
@@ -41,9 +42,13 @@ initializeClient().catch(console.error);
 
 app.use(express.json());
 app.use(session({
-    secret: 'some secret',
-    resave: false,
-    saveUninitialized: false
+  secret: 'some secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,
+    sameSite: 'none'
+  }
 }));
 
 const checkAuth = (req, res, next) => {
@@ -126,7 +131,7 @@ async function startServer() {
     client = new issuer.Client({
       client_id: process.env.COGNITO_CLIENT_ID,
       client_secret: process.env.COGNITO_CLIENT_SECRET,
-      redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com:5000/callback'],
+      redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback'],
       response_types: ['code']
     });
 
@@ -298,13 +303,3 @@ spaRoutes.forEach(route => {
         res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
-
-app.use(session({
-  secret: 'some secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,
-    sameSite: 'none'
-  }
-}));
