@@ -96,7 +96,7 @@ app.get('/callback', async (req, res) => {
 
         console.log("User logged in:", userInfo);
 
-        res.redirect('/');
+        res.redirect('/?loggedin=true');
     } catch (err) {
         console.error('Callback error:', err);
         res.redirect('/');

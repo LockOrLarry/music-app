@@ -205,7 +205,14 @@ function downloadAllFlac() {
 window.addEventListener("popstate", () => { location.pathname === "/myfavourites" ? showFavouritesPage() : showSearchPage(); });
 document.getElementById("searchBtn").addEventListener("click", searchTracks);
 document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchTracks(); });
-document.addEventListener("DOMContentLoaded", () => { getAuthState(); });
+document.addEventListener("DOMContentLoaded", () => {
+  getAuthState();
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("loggedin")) {
+    window.history.replaceState({}, "", "/");
+    getAuthState(); // force refresh
+  }
+});
 </script>
 </body>
 </html>
