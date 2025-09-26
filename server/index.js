@@ -35,11 +35,11 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
-    sameSite: 'lax',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
-  }
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'none',
+  httpOnly: true,
+  maxAge: 24 * 60 * 60 * 1000
+}
 }));
 
 const checkAuth = (req, res, next) => {
