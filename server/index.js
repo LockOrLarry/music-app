@@ -71,6 +71,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => { 
+    console.log("***WAK DEBUG*** Callback endpoint")
     try {
         console.log("Callback received - code:", !!req.query.code, "state:", !!req.query.state);
         
