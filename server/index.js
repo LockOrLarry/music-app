@@ -73,6 +73,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => { 
+    console.log("***WAK DEBUG*** Callback endpoint")
     try {
         const params = client.callbackParams(req);
 

@@ -39,7 +39,7 @@ const FORMATS = ["mp3", "ogg", "wav", "flac"];
 let isAuthenticated = false;
 let userInfo = {};
 
-async function getAuthState() {
+function getAuthState() {
   try {
     const res = await fetch("/userinfo", { credentials: "include" });
     if (!res.ok) throw new Error("Not authenticated");
@@ -206,6 +206,7 @@ window.addEventListener("popstate", () => { location.pathname === "/myfavourites
 document.getElementById("searchBtn").addEventListener("click", searchTracks);
 document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchTracks(); });
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("***WAK DEBUG*** DOM Content Loaded event received...")
   getAuthState();
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("loggedin")) {
