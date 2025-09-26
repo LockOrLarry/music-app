@@ -109,10 +109,11 @@ app.get("/logout", (req, res) => {
 
 // SPA auth state
 app.get('/userinfo', checkAuth, (req, res) => {
-    res.json({
-        isAuthenticated: req.isAuthenticated,
-        userInfo: req.session.userInfo || {}
-    });
+  console.log("Session:", req.session);
+  res.json({
+    isAuthenticated: req.isAuthenticated,
+    userInfo: req.session.userInfo || {}
+  });
 });
 
 // --- Jamendo endpoints ---
@@ -297,3 +298,13 @@ spaRoutes.forEach(route => {
         res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
+
+app.use(session({
+  secret: 'some secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,
+    sameSite: 'none'
+  }
+}));
