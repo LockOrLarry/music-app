@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const DynamoDBStore = require('connect-dynamodb')(session);
 const { Issuer, generators } = require('openid-client');
 const path = require('path');
 const { Buffer } = require('buffer');
@@ -30,9 +31,18 @@ initializeClient().catch(console.error);
 
 app.use(express.json());
 app.use(session({
+    store: new DynamoDBStore({
+        table: 'sessions',
+        AWSConfigJSON: { region: 'ap-southeast-2' }
+    }),
     secret: 'some secret',
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+        secure: true,
+        httpOnly: true,
+        sameSite: 'lax'
+    }
 }));
 
 const checkAuth = (req, res, next) => {
@@ -64,7 +74,6 @@ app.get('/callback', async (req, res) => {
             { nonce: req.session.nonce, state: req.session.state }
         );
 
-        // Save tokens into session
         req.session.tokenSet = {
             id_token: tokenSet.id_token,
             access_token: tokenSet.access_token,
@@ -72,7 +81,6 @@ app.get('/callback', async (req, res) => {
             expires_at: tokenSet.expires_at
         };
 
-        // Fetch user info and store in session too
         const userInfo = await client.userinfo(tokenSet.access_token);
         req.session.userInfo = userInfo;
 
@@ -85,18 +93,14 @@ app.get('/callback', async (req, res) => {
     }
 });
 
-
 app.get("/logout", (req, res) => {
-  const redirectAfterLogout = "https://jamapp.cab432.com"; // where user returns
+  const redirectAfterLogout = "https://jamapp.cab432.com";
   req.session.destroy(err => {
     if (err) {
       console.error("Session destroy error:", err);
       return res.redirect("/");
     }
-    // Clear session cookie in browser
     res.clearCookie("connect.sid");
-
-    // Redirect to Cognito logout
     const logoutUrl = `https://${process.env.COGNITO_DOMAIN}/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(redirectAfterLogout)}`;
     res.redirect(logoutUrl);
   });
@@ -113,7 +117,6 @@ app.get('/userinfo', checkAuth, (req, res) => {
 // --- Jamendo endpoints ---
 const CLIENT_ID = process.env.JAMENDO_CLIENT_ID;
 
-// Search tracks
 app.get('/search', checkAuth, async (req, res) => {
     try {
         const query = req.query.q || '';
@@ -129,7 +132,6 @@ app.get('/search', checkAuth, async (req, res) => {
     }
 });
 
-// Download individual track
 app.get('/download/:id', checkAuth, async (req, res) => {
     const trackId = req.params.id;
     const format = req.query.format;
@@ -164,6 +166,7 @@ app.get('/download/:id', checkAuth, async (req, res) => {
     }
 });
 
+// --- Favourites endpoints ---
 app.post('/favourite', checkAuth, async (req, res) => {
   try {
     if (!req.isAuthenticated) {
@@ -265,11 +268,9 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
   }
 });
 
-
 // Serve SPA
 app.use(express.static(path.join(__dirname, "client/dist")));
 
-// Explicit SPA routes
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
     app.get(route, (req, res) => {

@@ -41,7 +41,7 @@ let userInfo = {};
 
 async function getAuthState() {
   try {
-    const res = await fetch("/userinfo");
+    const res = await fetch("/userinfo", { credentials: "same-origin" });
     if (!res.ok) throw new Error("Not authenticated");
     const data = await res.json();
     isAuthenticated = data.isAuthenticated;
@@ -66,7 +66,7 @@ function setAuthUI(auth, info) {
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
       <button id="downloadAllFlacBtn" class="authBtn download">Download All FLAC</button>
     `;
-    document.getElementById("logoutBtn").onclick = async () => { await fetch("/logout"); location.reload(); };
+    document.getElementById("logoutBtn").onclick = async () => { await fetch("/logout", { credentials: "same-origin" }); location.reload(); };
     document.getElementById("favouritesBtn").onclick = showFavouritesPage;
     document.getElementById("downloadAllFlacBtn").onclick = downloadAllFlac;
   } else {
@@ -99,12 +99,14 @@ async function renderTracks(tracks) {
   let favouritedIds = [];
   if (isAuthenticated) {
     try {
-      const res = await fetch("/myfavourites");
+      const res = await fetch("/myfavourites", { credentials: "same-origin" });
       if (res.ok) {
         const data = await res.json();
         favouritedIds = (data.results || []).map(t => t.id);
       }
-    } catch {}
+    } catch (err) {
+      console.error("Failed to fetch favourites for button states:", err);
+    }
   }
 
   tracks.forEach(track => {
@@ -144,8 +146,6 @@ async function renderTracks(tracks) {
                 searchTracks();
             }
         };
-
-
         trackDiv.appendChild(favBtn);
     }
 
@@ -155,7 +155,7 @@ async function renderTracks(tracks) {
 
 async function showFavouritesPage() {
     const resultsDiv = document.getElementById("results");
-    resultsDiv.innerHTML = ""; // clear previous content
+    resultsDiv.innerHTML = "";
 
     // Back button
     const backBtn = document.createElement("button");
@@ -175,10 +175,9 @@ async function showFavouritesPage() {
         renderTracks(data.results || []);
     } catch (err) {
         resultsDiv.innerHTML += `<p>Error fetching favourites: ${err.message}</p>`;
-        console.error(err);
+        console.error("Error fetching favourites:", err);
     }
 }
-
 
 function showSearchPage() {
   history.pushState({}, "", "/");
@@ -188,7 +187,7 @@ function showSearchPage() {
 }
 
 function downloadAllFlac() {
-  fetch("/myfavourites")
+  fetch("/myfavourites", { credentials: "same-origin" })
     .then(res => res.json())
     .then(data => {
       const tracks = data.results || [];
