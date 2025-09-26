@@ -30,6 +30,20 @@ async function getJamendoClientId() {
 
 app.use(express.json());
 app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://jamapp.cab432.com');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(session({
   secret: process.env.JWT_SECRET || 'some secret',
   resave: false,
@@ -41,13 +55,6 @@ app.use(session({
   maxAge: 24 * 60 * 60 * 1000
 }
 }));
-
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://jamapp.cab432.com');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-});
 
 const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
