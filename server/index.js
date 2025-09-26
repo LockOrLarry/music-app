@@ -31,27 +31,16 @@ async function getJamendoClientId() {
 app.use(express.json());
 app.set('trust proxy', 1);
 app.use(session({
-  secret: 'some secret',
+  secret: process.env.JWT_SECRET || 'some secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: false,
-    sameSite: 'none'
+    sameSite: 'lax',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
-
-// // --- Initialize OpenID Client ---
-// async function initializeClient() {
-//     const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
-//     client = new issuer.Client({
-//         client_id: process.env.COGNITO_CLIENT_ID,
-//         client_secret: process.env.COGNITO_CLIENT_SECRET,
-//         redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback'],
-//         response_types: ['code']
-//     });
-// }
-// initializeClient().catch(console.error);
-
 
 const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
@@ -64,43 +53,70 @@ app.get('/login', (req, res) => {
     const state = generators.state();
     req.session.nonce = nonce;
     req.session.state = state;
-    const authUrl = client.authorizationUrl({
-        scope: 'email openid profile',
-        state,
-        nonce
+    
+    // Save session before redirect
+    req.session.save((err) => {
+        if (err) {
+            console.error('Session save error in /login:', err);
+            return res.status(500).send('Login error');
+        }
+        
+        const authUrl = client.authorizationUrl({
+            scope: 'email openid profile',
+            state,
+            nonce
+        });
+        res.redirect(authUrl);
     });
-    res.redirect(authUrl);
 });
 
 app.get('/callback', async (req, res) => { 
     console.log("***WAK DEBUG*** Callback endpoint")
     try {
-        const params = client.callbackParams(req);
+        console.log("Callback received - code:", !!req.query.code, "state:", !!req.query.state);
+        
+        if (!req.query.code) {
+            throw new Error('No authorization code received');
+        }
 
         const tokenSet = await client.callback(
-            process.env.COGNITO_REDIRECT_URI || 'https://jamapp.cab432.com/callback',
-            params,
-            { nonce: req.session.nonce, state: req.session.state }
+            process.env.COGNITO_REDIRECT_URI,
+            req.query,
+            { 
+                nonce: req.session.nonce, 
+                state: req.session.state 
+            }
         );
 
-        req.session.tokenSet = {
-            id_token: tokenSet.id_token,
-            access_token: tokenSet.access_token,
-            refresh_token: tokenSet.refresh_token,
-            expires_at: tokenSet.expires_at
-        };
+        console.log("Token exchange successful");
+
+        req.session.tokenSet = tokenSet;
 
         const userInfo = await client.userinfo(tokenSet.access_token);
         req.session.userInfo = userInfo;
+        req.session.isAuthenticated = true;
 
-        console.log("Session after login:", req.session);
+        console.log("User info received:", userInfo);
 
-        console.log("User logged in:", userInfo);
+        // Clear OAuth state
+        req.session.nonce = null;
+        req.session.state = null;
 
-        res.redirect('/?loggedin=true');
+        // Save session and redirect
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error in callback:', err);
+                return res.redirect('/?error=session_save_failed');
+            }
+            res.redirect('/?loggedin=true');
+        });
+
     } catch (err) {
-        console.error('Callback error:', err);
-        res.redirect('/');
+        console.error('Callback error:', err.message);
+        if (err.response) {
+            console.error('HTTP error:', err.response.status, await err.response.text());
+        }
+        res.redirect('/?error=auth_failed');
     }
 });
 
@@ -119,9 +135,8 @@ app.get("/logout", (req, res) => {
 
 // SPA auth state
 app.get('/userinfo', checkAuth, (req, res) => {
-  console.log("Session:", req.session);
   res.json({
-    isAuthenticated: req.isAuthenticated,
+    isAuthenticated: !!req.session.userInfo,
     userInfo: req.session.userInfo || {}
   });
 });
@@ -131,18 +146,25 @@ let CLIENT_ID;
 async function startServer() {
   try {
     CLIENT_ID = await getJamendoClientId();
-    const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
-
-    issuer.metadata.authorization_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/authorize`;
-    issuer.metadata.token_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/token`;
-    issuer.metadata.userinfo_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/userInfo`;
+    
+    // Manual issuer configuration for Cognito
+    const issuer = new Issuer({
+      issuer: `https://cognito-idp.ap-southeast-2.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
+      authorization_endpoint: `https://${process.env.COGNITO_DOMAIN}/oauth2/authorize`,
+      token_endpoint: `https://${process.env.COGNITO_DOMAIN}/oauth2/token`,
+      userinfo_endpoint: `https://${process.env.COGNITO_DOMAIN}/oauth2/userInfo`,
+      jwks_uri: `https://cognito-idp.ap-southeast-2.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+    });
 
     client = new issuer.Client({
       client_id: process.env.COGNITO_CLIENT_ID,
       client_secret: process.env.COGNITO_CLIENT_SECRET,
       redirect_uris: [process.env.COGNITO_REDIRECT_URI],
-      response_types: ['code']
+      response_types: ['code'],
+      token_endpoint_auth_method: 'client_secret_basic'
     });
+
+    console.log('OIDC client initialized successfully');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (err) {
     console.error("Startup error:", err);
