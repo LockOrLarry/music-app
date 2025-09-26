@@ -41,7 +41,7 @@ let userInfo = {};
 
 async function getAuthState() {
   try {
-    const res = await fetch("/userinfo", { credentials: "same-origin" });
+    const res = await fetch("/userinfo", { credentials: "include" });
     if (!res.ok) throw new Error("Not authenticated");
     const data = await res.json();
     isAuthenticated = data.isAuthenticated;
@@ -66,7 +66,7 @@ function setAuthUI(auth, info) {
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
       <button id="downloadAllFlacBtn" class="authBtn download">Download All FLAC</button>
     `;
-    document.getElementById("logoutBtn").onclick = async () => { await fetch("/logout", { credentials: "same-origin" }); location.reload(); };
+    document.getElementById("logoutBtn").onclick = async () => { await fetch("/logout", { credentials: "include" }); location.reload(); };
     document.getElementById("favouritesBtn").onclick = showFavouritesPage;
     document.getElementById("downloadAllFlacBtn").onclick = downloadAllFlac;
   } else {
@@ -79,7 +79,7 @@ async function searchTracks() {
   const query = document.getElementById("searchInput").value.trim();
   if (!query) return;
   try {
-    const res = await fetch(`/search?q=${encodeURIComponent(query)}`, { credentials: "same-origin" });
+    const res = await fetch(`/search?q=${encodeURIComponent(query)}`, { credentials: "include" });
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();
     renderTracks(data.results || []);
@@ -99,7 +99,7 @@ async function renderTracks(tracks) {
   let favouritedIds = [];
   if (isAuthenticated) {
     try {
-      const res = await fetch("/myfavourites", { credentials: "same-origin" });
+      const res = await fetch("/myfavourites", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         favouritedIds = (data.results || []).map(t => t.id);
@@ -138,7 +138,7 @@ async function renderTracks(tracks) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ trackId: track.id }),
-                credentials: "same-origin"
+                credentials: "include"
             });
             if (document.location.pathname === "/myfavourites") {
                 showFavouritesPage();
@@ -169,7 +169,7 @@ async function showFavouritesPage() {
     document.querySelector("h1").textContent = "Favourites";
 
     try {
-        const res = await fetch("/myfavourites", { credentials: "same-origin" });
+        const res = await fetch("/myfavourites", { credentials: "include" });
         if (!res.ok) throw new Error(res.statusText);
         const data = await res.json();
         renderTracks(data.results || []);
@@ -187,7 +187,7 @@ function showSearchPage() {
 }
 
 function downloadAllFlac() {
-  fetch("/myfavourites", { credentials: "same-origin" })
+  fetch("/myfavourites", { credentials: "include" })
     .then(res => res.json())
     .then(data => {
       const tracks = data.results || [];
