@@ -86,11 +86,12 @@ app.get('/callback', async (req, res) => {
 });
 
 
-app.get('/logout', (req, res) => {
-    req.session.destroy(() => {
-        const logoutUrl = `https://ap-southeast-2_k6WMVcixi.auth.ap-southeast-2.amazoncognito.com/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000')}`;
-        res.redirect(logoutUrl);
-    });
+app.get("/logout", (req, res) => {
+  const redirectAfterLogout = "https://jamapp.cab432.com"; // where you want to go after logout
+  req.session.destroy(() => {
+    const logoutUrl = `https://${process.env.COGNITO_DOMAIN}/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(redirectAfterLogout)}`;
+    res.redirect(logoutUrl);
+  });
 });
 
 // SPA auth state

@@ -79,7 +79,7 @@ async function searchTracks() {
   const query = document.getElementById("searchInput").value.trim();
   if (!query) return;
   try {
-    const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/search?q=${encodeURIComponent(query)}`, { credentials: "same-origin" });
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();
     renderTracks(data.results || []);
@@ -127,15 +127,26 @@ async function renderTracks(tracks) {
     });
 
     if (isAuthenticated) {
-      const favBtn = document.createElement("button");
-      favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
-      favBtn.className = "authBtn";
-      favBtn.onclick = async () => {
-        const endpoint = favouritedIds.includes(track.id) ? "/unfavourite" : "/favourite";
-        await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trackId: track.id }) });
-        renderTracks(tracks);
-      };
-      trackDiv.appendChild(favBtn);
+        const favBtn = document.createElement("button");
+        favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
+        favBtn.className = "authBtn";
+        favBtn.onclick = async () => {
+            const endpoint = favouritedIds.includes(track.id) ? "/unfavourite" : "/favourite";
+            await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ trackId: track.id }),
+                credentials: "same-origin"
+            });
+            if (document.location.pathname === "/myfavourites") {
+                showFavouritesPage();
+            } else {
+                searchTracks();
+            }
+        };
+
+
+        trackDiv.appendChild(favBtn);
     }
 
     resultsDiv.appendChild(trackDiv);
@@ -143,17 +154,31 @@ async function renderTracks(tracks) {
 }
 
 async function showFavouritesPage() {
-  history.pushState({}, "", "/myfavourites");
-  document.getElementById("searchContainer").style.display = "none";
-  document.querySelector("h1").textContent = "Favourites";
-  try {
-    const res = await fetch("/myfavourites");
-    const data = await res.json();
-    renderTracks(data.results || []);
-  } catch (err) {
-    document.getElementById("results").textContent = "Error: " + err.message;
-  }
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.innerHTML = ""; // clear previous content
+
+    // Back button
+    const backBtn = document.createElement("button");
+    backBtn.textContent = "Back to Search";
+    backBtn.className = "authBtn";
+    backBtn.onclick = showSearchPage;
+    resultsDiv.appendChild(backBtn);
+
+    history.pushState({}, "", "/myfavourites");
+    document.getElementById("searchContainer").style.display = "none";
+    document.querySelector("h1").textContent = "Favourites";
+
+    try {
+        const res = await fetch("/myfavourites", { credentials: "same-origin" });
+        if (!res.ok) throw new Error(res.statusText);
+        const data = await res.json();
+        renderTracks(data.results || []);
+    } catch (err) {
+        resultsDiv.innerHTML += `<p>Error fetching favourites: ${err.message}</p>`;
+        console.error(err);
+    }
 }
+
 
 function showSearchPage() {
   history.pushState({}, "", "/");
