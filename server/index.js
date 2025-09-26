@@ -71,9 +71,9 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/callback', async (req, res) => { 
-    console.log("***WAK DEBUG*** Callback endpoint")
+    console.error("***WAK DEBUG*** Callback endpoint")
     try {
-        console.log("Callback received - code:", !!req.query.code, "state:", !!req.query.state);
+        console.error("Callback received - code:", !!req.query.code, "state:", !!req.query.state);
         
         if (!req.query.code) {
             throw new Error('No authorization code received');
@@ -88,7 +88,7 @@ app.get('/callback', async (req, res) => {
             }
         );
 
-        console.log("Token exchange successful");
+        console.error("Token exchange successful");
 
         req.session.tokenSet = tokenSet;
 
@@ -96,7 +96,7 @@ app.get('/callback', async (req, res) => {
         req.session.userInfo = userInfo;
         req.session.isAuthenticated = true;
 
-        console.log("User info received:", userInfo);
+        console.error("User info received:", userInfo);
 
         // Clear OAuth state
         req.session.nonce = null;
@@ -164,8 +164,8 @@ async function startServer() {
       token_endpoint_auth_method: 'client_secret_basic'
     });
 
-    console.log('OIDC client initialized successfully');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    console.error('OIDC client initialized successfully');
+    app.listen(PORT, () => console.error(`Server running on port ${PORT}`));
   } catch (err) {
     console.error("Startup error:", err);
   }
@@ -236,7 +236,7 @@ app.post('/favourite', checkAuth, async (req, res) => {
       return res.status(400).json({ error: 'Missing trackId' });
     }
 
-    console.log("Adding favourite", { user: req.session.userInfo.sub, trackId });
+    console.error("Adding favourite", { user: req.session.userInfo.sub, trackId });
     await dynamo.send(new PutItemCommand({
       TableName: FAVOURITES_TABLE,
       Item: {
@@ -265,7 +265,7 @@ app.post("/unfavourite", checkAuth, async (req, res) => {
       return res.status(400).json({ error: 'Missing trackId' });
     }
 
-    console.log("Removing favourite", { user: req.session.userInfo.sub, trackId });
+    console.error("Removing favourite", { user: req.session.userInfo.sub, trackId });
     await dynamo.send(new DeleteItemCommand({
       TableName: FAVOURITES_TABLE,
       Key: {
@@ -288,7 +288,7 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
       return res.status(401).json({ error: 'Not logged in' });
     }
 
-    console.log("Fetching favourites for user", req.session.userInfo.sub);
+    console.error("Fetching favourites for user", req.session.userInfo.sub);
 
     const favRes = await dynamo.send(new QueryCommand({
       TableName: FAVOURITES_TABLE,
