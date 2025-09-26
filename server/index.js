@@ -77,7 +77,7 @@ app.get('/callback', async (req, res) => {
         const params = client.callbackParams(req);
 
         const tokenSet = await client.callback(
-            process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback',
+            process.env.COGNITO_REDIRECT_URI || 'https://jamapp.cab432.com/callback',
             params,
             { nonce: req.session.nonce, state: req.session.state }
         );
@@ -130,15 +130,18 @@ let CLIENT_ID;
 async function startServer() {
   try {
     CLIENT_ID = await getJamendoClientId();
-
     const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
+
+    issuer.metadata.authorization_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/authorize`;
+    issuer.metadata.token_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/token`;
+    issuer.metadata.userinfo_endpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/userInfo`;
+
     client = new issuer.Client({
       client_id: process.env.COGNITO_CLIENT_ID,
       client_secret: process.env.COGNITO_CLIENT_SECRET,
-      redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback'],
+      redirect_uris: [process.env.COGNITO_REDIRECT_URI],
       response_types: ['code']
     });
-
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (err) {
     console.error("Startup error:", err);
