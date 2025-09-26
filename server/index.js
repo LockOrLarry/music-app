@@ -28,19 +28,8 @@ async function getJamendoClientId() {
   return param.Parameter.Value;
 }
 
-// --- Initialize OpenID Client ---
-async function initializeClient() {
-    const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
-    client = new issuer.Client({
-        client_id: process.env.COGNITO_CLIENT_ID,
-        client_secret: process.env.COGNITO_CLIENT_SECRET,
-        redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback'],
-        response_types: ['code']
-    });
-}
-initializeClient().catch(console.error);
-
 app.use(express.json());
+app.set('trust proxy', 1);
 app.use(session({
   secret: 'some secret',
   resave: false,
@@ -50,6 +39,19 @@ app.use(session({
     sameSite: 'none'
   }
 }));
+
+// // --- Initialize OpenID Client ---
+// async function initializeClient() {
+//     const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
+//     client = new issuer.Client({
+//         client_id: process.env.COGNITO_CLIENT_ID,
+//         client_secret: process.env.COGNITO_CLIENT_SECRET,
+//         redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback'],
+//         response_types: ['code']
+//     });
+// }
+// initializeClient().catch(console.error);
+
 
 const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
@@ -89,6 +91,8 @@ app.get('/callback', async (req, res) => {
 
         const userInfo = await client.userinfo(tokenSet.access_token);
         req.session.userInfo = userInfo;
+
+        console.log("Session after login:", req.session);
 
         console.log("User logged in:", userInfo);
 
