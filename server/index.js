@@ -87,8 +87,16 @@ app.get('/callback', async (req, res) => {
 
 
 app.get("/logout", (req, res) => {
-  const redirectAfterLogout = "https://jamapp.cab432.com"; // where you want to go after logout
-  req.session.destroy(() => {
+  const redirectAfterLogout = "https://jamapp.cab432.com"; // where user returns
+  req.session.destroy(err => {
+    if (err) {
+      console.error("Session destroy error:", err);
+      return res.redirect("/");
+    }
+    // Clear session cookie in browser
+    res.clearCookie("connect.sid");
+
+    // Redirect to Cognito logout
     const logoutUrl = `https://${process.env.COGNITO_DOMAIN}/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(redirectAfterLogout)}`;
     res.redirect(logoutUrl);
   });
@@ -156,39 +164,73 @@ app.get('/download/:id', checkAuth, async (req, res) => {
     }
 });
 
-// Favourites
 app.post('/favourite', checkAuth, async (req, res) => {
-  if (!req.isAuthenticated) return res.status(401).json({ error: 'Not logged in' });
-  const { trackId } = req.body;
-  if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
-
-  await dynamo.send(new PutItemCommand({
-    TableName: FAVOURITES_TABLE,
-    Item: {
-      user_id: { S: req.session.userInfo.sub },
-      track_id: { N: String(trackId) }
+  try {
+    if (!req.isAuthenticated) {
+      console.error("Favourite attempt without login", { body: req.body });
+      return res.status(401).json({ error: 'Not logged in' });
     }
-  }));
 
-  res.json({ success: true });
+    const { trackId } = req.body;
+    if (!trackId) {
+      console.error("Favourite attempt missing trackId", { body: req.body, user: req.session.userInfo });
+      return res.status(400).json({ error: 'Missing trackId' });
+    }
+
+    console.log("Adding favourite", { user: req.session.userInfo.sub, trackId });
+    await dynamo.send(new PutItemCommand({
+      TableName: FAVOURITES_TABLE,
+      Item: {
+        user_id: { S: req.session.userInfo.sub },
+        track_id: { N: String(trackId) }
+      }
+    }));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error in /favourite:", err, { body: req.body, session: req.session.userInfo });
+    res.status(500).json({ error: 'Failed to favourite track' });
+  }
 });
 
 app.post("/unfavourite", checkAuth, async (req, res) => {
-  const { trackId } = req.body;
-  if (!trackId) return res.status(400).json({ error: 'Missing trackId' });
-
-  await dynamo.send(new DeleteItemCommand({
-    TableName: FAVOURITES_TABLE,
-    Key: {
-      user_id: { S: req.session.userInfo.sub },
-      track_id: { N: String(trackId) }
+  try {
+    if (!req.isAuthenticated) {
+      console.error("Unfavourite attempt without login", { body: req.body });
+      return res.status(401).json({ error: 'Not logged in' });
     }
-  }));
-  res.json({ success: true });
+
+    const { trackId } = req.body;
+    if (!trackId) {
+      console.error("Unfavourite attempt missing trackId", { body: req.body, user: req.session.userInfo });
+      return res.status(400).json({ error: 'Missing trackId' });
+    }
+
+    console.log("Removing favourite", { user: req.session.userInfo.sub, trackId });
+    await dynamo.send(new DeleteItemCommand({
+      TableName: FAVOURITES_TABLE,
+      Key: {
+        user_id: { S: req.session.userInfo.sub },
+        track_id: { N: String(trackId) }
+      }
+    }));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error in /unfavourite:", err, { body: req.body, session: req.session.userInfo });
+    res.status(500).json({ error: 'Failed to unfavourite track' });
+  }
 });
 
 app.get('/myfavourites', checkAuth, async (req, res) => {
   try {
+    if (!req.isAuthenticated) {
+      console.error("Fetching favourites without login");
+      return res.status(401).json({ error: 'Not logged in' });
+    }
+
+    console.log("Fetching favourites for user", req.session.userInfo.sub);
+
     const favRes = await dynamo.send(new QueryCommand({
       TableName: FAVOURITES_TABLE,
       KeyConditionExpression: "user_id = :uid",
@@ -200,31 +242,29 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
     const trackIds = favRes.Items.map(item => parseInt(item.track_id.N)).filter(id => !isNaN(id));
     if (!trackIds.length) return res.json({ results: [] });
 
-    const trackPromises = trackIds.map(async (trackId) => {
+    const trackResults = [];
+    for (const trackId of trackIds) {
       try {
         const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&format=json&id=${trackId}`;
         const response = await fetch(url);
         const data = await response.json();
         if (data.results && data.results.length > 0) {
-          return data.results[0];
+          trackResults.push({ ...data.results[0], id: parseInt(data.results[0].id) });
+        } else {
+          console.warn(`No data returned from Jamendo for trackId ${trackId}`);
         }
-        return null;
       } catch (err) {
-        console.error(`Error fetching track ${trackId}:`, err);
-        return null;
+        console.error(`Error fetching track ${trackId} from Jamendo:`, err);
       }
-    });
+    }
 
-    const trackResults = await Promise.all(trackPromises);
-    const results = trackResults.filter(track => track !== null)
-                                .map(track => ({ ...track, id: parseInt(track.id) }));
-
-    res.json({ results });
+    res.json({ results: trackResults });
   } catch (err) {
-    console.error("DynamoDB query error:", err);
+    console.error("DynamoDB query error in /myfavourites:", err, { session: req.session.userInfo });
     res.status(500).json({ error: "Failed to fetch favourites" });
   }
 });
+
 
 // Serve SPA
 app.use(express.static(path.join(__dirname, "client/dist")));
