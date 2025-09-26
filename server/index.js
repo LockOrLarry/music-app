@@ -16,6 +16,17 @@ const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
 const app = express();
 let client;
 
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
+const ssm = new SSMClient({ region: "ap-southeast-2" });
+
+async function getJamendoClientId() {
+  const param = await ssm.send(new GetParameterCommand({
+    Name: "/group39/JamendoClientID",
+    WithDecryption: false
+  }));
+  return param.Parameter.Value;
+}
+
 // --- Initialize OpenID Client ---
 async function initializeClient() {
     const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
@@ -72,10 +83,10 @@ app.get('/callback', async (req, res) => {
 });
 
 app.get('/logout', (req, res) => {
-    req.session.destroy(() => {
-        const logoutUrl = `https://ap-southeast-2_k6WMVcixi.auth.ap-southeast-2.amazoncognito.com/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000')}`;
-        res.redirect(logoutUrl);
-    });
+  req.session.destroy(() => {
+    const logoutUrl = `https://ap-southeast-2_k6WMVcixi.auth.ap-southeast-2.amazoncognito.com/logout?client_id=${process.env.COGNITO_CLIENT_ID}&logout_uri=${encodeURIComponent(process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000')}`;
+    res.redirect(logoutUrl);
+  });
 });
 
 // SPA auth state
@@ -87,7 +98,25 @@ app.get('/userinfo', checkAuth, (req, res) => {
 });
 
 // --- Jamendo endpoints ---
-const CLIENT_ID = process.env.JAMENDO_CLIENT_ID;
+let CLIENT_ID;
+async function startServer() {
+  try {
+    CLIENT_ID = await getJamendoClientId();
+
+    const issuer = await Issuer.discover('https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_k6WMVcixi');
+    client = new issuer.Client({
+      client_id: process.env.COGNITO_CLIENT_ID,
+      client_secret: process.env.COGNITO_CLIENT_SECRET,
+      redirect_uris: [process.env.REDIRECT_URI || 'https://jamapp.cab432.com:5000/callback'],
+      response_types: ['code']
+    });
+
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (err) {
+    console.error("Startup error:", err);
+  }
+}
+startServer();
 
 // Search tracks
 app.get('/search', checkAuth, async (req, res) => {
@@ -220,6 +249,3 @@ spaRoutes.forEach(route => {
         res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
