@@ -184,6 +184,8 @@ function showSearchPage() {
   document.getElementById("searchContainer").style.display = "flex";
   document.querySelector("h1").textContent = "Jamendo Track Search";
   document.getElementById("results").innerHTML = "";
+  // Clear any existing search results and reset the page
+  searchTracks(); // Re-run the last search or show empty state
 }
 
 function downloadAllFlac() {

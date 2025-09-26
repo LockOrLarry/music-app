@@ -35,12 +35,19 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
-    sameSite: 'lax',
+    secure: true,       // required if HTTPS
+    sameSite: 'none',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
+
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://jamapp.cab432.com');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
 const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
