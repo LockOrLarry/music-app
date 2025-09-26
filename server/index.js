@@ -1,6 +1,5 @@
 const express = require('express');
 const session = require('express-session');
-const DynamoDBStore = require('connect-dynamodb')(session);
 const { Issuer, generators } = require('openid-client');
 const path = require('path');
 const { Buffer } = require('buffer');
@@ -31,18 +30,9 @@ initializeClient().catch(console.error);
 
 app.use(express.json());
 app.use(session({
-    store: new DynamoDBStore({
-        table: 'sessions',
-        AWSConfigJSON: { region: 'ap-southeast-2' }
-    }),
     secret: 'some secret',
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,
-        httpOnly: true,
-        sameSite: 'lax'
-    }
+    saveUninitialized: false
 }));
 
 const checkAuth = (req, res, next) => {
