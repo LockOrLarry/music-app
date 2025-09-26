@@ -39,7 +39,7 @@ const FORMATS = ["mp3", "ogg", "wav", "flac"];
 let isAuthenticated = false;
 let userInfo = {};
 
-function getAuthState() {
+async function getAuthState() {
   try {
     const res = await fetch("/userinfo", { credentials: "include" });
     if (!res.ok) throw new Error("Not authenticated");
