@@ -54,22 +54,37 @@ app.get('/login', (req, res) => {
     res.redirect(authUrl);
 });
 
-app.get('/callback', async (req, res) => {
+app.get('/callback', async (req, res) => { 
     try {
         const params = client.callbackParams(req);
+
         const tokenSet = await client.callback(
-            process.env.REDIRECT_URI || 'http://jamapp.cab432.com:5000/callback',
+            process.env.REDIRECT_URI || 'https://jamapp.cab432.com/callback',
             params,
             { nonce: req.session.nonce, state: req.session.state }
         );
+
+        // Save tokens into session
+        req.session.tokenSet = {
+            id_token: tokenSet.id_token,
+            access_token: tokenSet.access_token,
+            refresh_token: tokenSet.refresh_token,
+            expires_at: tokenSet.expires_at
+        };
+
+        // Fetch user info and store in session too
         const userInfo = await client.userinfo(tokenSet.access_token);
         req.session.userInfo = userInfo;
+
+        console.log("User logged in:", userInfo);
+
         res.redirect('/');
     } catch (err) {
         console.error('Callback error:', err);
         res.redirect('/');
     }
 });
+
 
 app.get('/logout', (req, res) => {
     req.session.destroy(() => {
