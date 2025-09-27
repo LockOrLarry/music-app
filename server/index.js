@@ -264,8 +264,8 @@ app.get('/download/:id', checkAuth, async (req, res) => {
 
 // --- Favourites endpoints ---
 app.post('/favourite', checkAuth, async (req, res) => {
-  console.error("*** RJK you have entered /favourite ***")
   try {
+    console.error("*** RJK you have entered /favourite ***")
     if (!req.isAuthenticated) {
       console.error("Favourite attempt without login", { body: req.body });
       return res.status(401).json({ error: 'Not logged in' });

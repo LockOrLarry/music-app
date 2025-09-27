@@ -92,27 +92,84 @@ Resources:
         - Key: Purpose
           Value: SessionStore
   
-  SessionStorePolicy:
-    Type: AWS::IAM::Policy
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
     Properties:
-      PolicyName: SessionStoreAccess
-      Roles:
-        - CAB432-Instance-Role
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - dynamodb:GetItem
-              - dynamodb:PutItem
-              - dynamodb:DeleteItem
-              - dynamodb:Query
-            Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/jamapp-sessions
+      UserPoolName: jamapp-user-pool
+      MfaConfiguration: OPTIONAL  # Options: OFF, OPTIONAL, REQUIRED
+      SmsConfiguration:
+        ExternalId: jamapp-mfa
+        SnsCallerArn: arn:aws:iam::901444280953:role/CognitoSMSRole  # Replace with your actual role ARN
+      AutoVerifiedAttributes:
+        - email
+        - phone_number
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+        - Name: phone_number
+          Required: false
+          Mutable: true
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: jamapp-client
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ADMIN_NO_SRP_AUTH
+        - USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      CallbackURLs:
+        - https://jamapp.cab432.com/callback
+      LogoutURLs:
+        - https://jamapp.cab432.com
+      SupportedIdentityProviders:
+        - COGNITO
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+
+  CognitoDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: jamapp-auth
+      UserPoolId: !Ref CognitoUserPool
 
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
     Value: !Ref MusicServerInstance
+
   PublicIP:
     Description: Public IP of the EC2 instance
     Value: !GetAtt MusicServerInstance.PublicIp
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
+  CognitoClientId:
+    Description: Cognito App Client ID
+    Value: !Ref CognitoUserPoolClient
+
+  CognitoDomainUrl:
+    Description: Cognito Hosted Domain
+    Value: !Sub https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com
+
