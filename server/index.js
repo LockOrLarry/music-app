@@ -57,24 +57,29 @@ app.use((req, res, next) => {
 
 const DynamoDBStore = require('connect-dynamodb')(session);
 const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
-const jwtSecret = await getJwtSecret();
 
-app.use(session({
-  store: new DynamoDBStore({
-    client: dynamoClient,
-    table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
-    ttl: 86400
-  }),
-  secret: jwtSecret,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,
-    sameSite: 'none',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
-  }
-}));
+let jwtSecret;
+
+async function initializeApp() {
+    jwtSecret = await getJwtSecret();
+    
+    app.use(session({
+        store: new DynamoDBStore({
+            client: dynamoClient,
+            table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
+            ttl: 86400
+        }),
+        secret: jwtSecret,
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: true,
+            sameSite: 'none',
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000
+        }
+    }));
+}
 
 
 const checkAuth = (req, res, next) => {
@@ -181,6 +186,8 @@ let CLIENT_ID;
 async function startServer() {
   try {
     CLIENT_ID = await getJamendoClientId();
+
+    await initializeApp();
     
     // Manual issuer configuration for Cognito
     const issuer = new Issuer({
