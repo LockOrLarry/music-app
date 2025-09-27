@@ -5,8 +5,8 @@ import { join } from 'path';
 import { Buffer } from 'buffer';
 require('dotenv').config();
 
-import { transcodeBuffer } from './routes/ffmpeg';
-import { searchTracks } from './routes/jamendo';
+import { transcodeBuffer } from './routes/ffmpeg.js';
+import { searchTracks } from './routes/jamendo.js';
 
 import { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
@@ -15,6 +15,12 @@ const PORT = process.env.PORT || 5000;
 
 const app = express();
 let client;
+
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
