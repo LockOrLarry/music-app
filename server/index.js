@@ -1,15 +1,15 @@
-import express, { json } from 'express';
-import session from 'express-session';
-import { Issuer, generators } from 'openid-client';
-import { join } from 'path';
-import { Buffer } from 'buffer';
-import dotenv from 'dotenv';
-dotenv.config();
+const express = require('express');
+const session = require('express-session');
+const { Issuer, generators } = require('openid-client');
+const path = require('path');
+const { Buffer } = require('buffer');
+require('dotenv').config();
 
-import { transcodeBuffer } from './routes/ffmpeg.js';
-import { searchTracks } from './routes/jamendo.js';
+const { transcodeBuffer } = require('./routes/ffmpeg');
+const db = require('./db');
+const { searchTracks } = require('./routes/jamendo');
 
-import { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
 const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
 const PORT = process.env.PORT || 5000;
@@ -17,13 +17,7 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 let client;
 
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
 
 async function getJwtSecret() {
@@ -34,7 +28,7 @@ async function getJwtSecret() {
   return config.JWT_SECRET;
 }
 
-import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
 const ssm = new SSMClient({ region: "ap-southeast-2" });
 
 async function getJamendoClientId() {
@@ -45,7 +39,7 @@ async function getJamendoClientId() {
   return param.Parameter.Value;
 }
 
-app.use(json());
+app.use(express.json());
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
@@ -61,8 +55,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const { default: connectDynamoDB } = await import('connect-dynamodb');
-const DynamoDBStore = connectDynamoDB(session);
+const DynamoDBStore = require('connect-dynamodb')(session);
 const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
 const jwtSecret = await getJwtSecret();
 
@@ -363,14 +356,11 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
 });
 
 // Serve SPA
-import { static as serveStatic } from 'express';
-const CLIENT_DIST = join(__dirname, "..", "client", "dist");
-
-app.use(serveStatic(CLIENT_DIST));
+app.use(express.static(path.join(__dirname, "client/dist")));
 
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
     app.get(route, (req, res) => {
-        res.sendFile(join(CLIENT_DIST, "index.html"));
+        res.sendFile(path.join(__dirname, "client/dist/index.html"));
     });
 });
