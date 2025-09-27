@@ -74,31 +74,10 @@ Resources:
           systemctl enable nginx
           systemctl restart nginx
 
-  SessionStoreTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: jamapp-sessions
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
-      TimeToLiveSpecification:
-        AttributeName: expires
-        Enabled: true
-      Tags:
-        - Key: Purpose
-          Value: SessionStore
-
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
     Value: !Ref MusicServerInstance
-
   PublicIP:
     Description: Public IP of the EC2 instance
     Value: !GetAtt MusicServerInstance.PublicIp
-
-
