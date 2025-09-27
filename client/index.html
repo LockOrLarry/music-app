@@ -210,12 +210,12 @@ window.addEventListener("popstate", () => { location.pathname === "/myfavourites
 document.getElementById("searchBtn").addEventListener("click", searchTracks);
 document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchTracks(); });
 document.addEventListener("DOMContentLoaded", function() {
-  console.error("***WAK DEBUG*** DOM Content Loaded event received...")
-  getAuthState();
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("loggedin")) {
     window.history.replaceState({}, "", "/");
-    getAuthState(); // force refresh
+    setTimeout(getAuthState, 100); // slight delay to ensure session cookie is set
+  } else {
+    getAuthState();
   }
 });
 </script>
