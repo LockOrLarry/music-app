@@ -44,8 +44,16 @@ app.use((req, res, next) => {
   next();
 });
 
+const DynamoDBStore = require('connect-dynamodb')(session);
+const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
+
 app.use(session({
-  secret: process.env.JWT_SECRET || 'some secret',
+  store: new DynamoDBStore({
+    client: dynamoClient,
+    table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
+    ttl: 86400
+  }),
+  secret: process.env.JWT_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -55,6 +63,7 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
+
 
 const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
@@ -191,10 +200,6 @@ app.get('/search', checkAuth, async (req, res) => {
     try {
         const query = req.query.q || '';
         const results = await searchTracks(query);
-
-        if (req.isAuthenticated) {
-            db.run("INSERT INTO searches (user_id, query) VALUES (?, ?)", [req.session.userInfo.sub, query]);
-        }
 
         res.json({ results });
     } catch (err) {
