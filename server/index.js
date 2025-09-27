@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import express, { json } from 'express';
 import session from 'express-session';
 import { Issuer, generators } from 'openid-client';
@@ -365,11 +364,13 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
 
 // Serve SPA
 import { static as serveStatic } from 'express';
-app.use(serveStatic(join(__dirname, "client/dist")));
+const CLIENT_DIST = join(__dirname, "..", "client", "dist");
+
+app.use(serveStatic(CLIENT_DIST));
 
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
     app.get(route, (req, res) => {
-        res.sendFile(join(__dirname, "client/dist/index.html"));
+        res.sendFile(join(CLIENT_DIST, "index.html"));
     });
 });
