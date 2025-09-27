@@ -1,5 +1,11 @@
-const axios = require("axios");
-require("dotenv").config();
+import axios from "axios";
+import dotenv from "dotenv";
+dotenv.config();
+
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+const ssm = new SSMClient({ region: "ap-southeast-2" });
+
+const JAMENDO_BASE = "https://api.jamendo.com/v3.0";
 
 async function getJamendoClientId() {
   const param = await ssm.send(new GetParameterCommand({
@@ -9,21 +15,20 @@ async function getJamendoClientId() {
   return param.Parameter.Value;
 }
 
-const JAMENDO_BASE = "https://api.jamendo.com/v3.0";
-const CLIENT_ID = getJamendoClientId();
-
 // Search tracks
 async function searchTracks(query) {
-  const url = `${JAMENDO_BASE}/tracks/?client_id=${CLIENT_ID}&format=jsonpretty&limit=10&search=${encodeURIComponent(query)}`;
+  const clientId = await getJamendoClientId();
+  const url = `${JAMENDO_BASE}/tracks/?client_id=${clientId}&format=json&limit=10&search=${encodeURIComponent(query)}`;
   const res = await axios.get(url);
   return res.data.results;
 }
 
 // Get stream URL (direct link)
 async function getStream(trackId) {
-  const url = `${JAMENDO_BASE}/tracks/file/?client_id=${CLIENT_ID}&track_id=${trackId}`;
+  const clientId = await getJamendoClientId();
+  const url = `${JAMENDO_BASE}/tracks/file/?client_id=${clientId}&track_id=${trackId}`;
   const res = await axios.get(url);
   return res.data;
 }
 
-module.exports = { searchTracks, getStream };
+export { searchTracks, getStream };
