@@ -1,15 +1,14 @@
-const express = require('express');
-const session = require('express-session');
-const { Issuer, generators } = require('openid-client');
-const path = require('path');
-const { Buffer } = require('buffer');
+import express, { json } from 'express';
+import session from 'express-session';
+import { Issuer, generators } from 'openid-client';
+import { join } from 'path';
+import { Buffer } from 'buffer';
 require('dotenv').config();
 
-const { transcodeBuffer } = require('./routes/ffmpeg');
-const db = require('./db');
-const { searchTracks } = require('./routes/jamendo');
+import { transcodeBuffer } from './routes/ffmpeg';
+import { searchTracks } from './routes/jamendo';
 
-const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
+import { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
 const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
 const PORT = process.env.PORT || 5000;
@@ -17,7 +16,7 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 let client;
 
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
 
 async function getJwtSecret() {
@@ -28,7 +27,7 @@ async function getJwtSecret() {
   return config.JWT_SECRET;
 }
 
-const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 const ssm = new SSMClient({ region: "ap-southeast-2" });
 
 async function getJamendoClientId() {
@@ -39,7 +38,7 @@ async function getJamendoClientId() {
   return param.Parameter.Value;
 }
 
-app.use(express.json());
+app.use(json());
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
@@ -356,11 +355,11 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
 });
 
 // Serve SPA
-app.use(express.static(path.join(__dirname, "client/dist")));
+app.use(join(__dirname, "client/dist"));
 
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
     app.get(route, (req, res) => {
-        res.sendFile(path.join(__dirname, "client/dist/index.html"));
+        res.sendFile(join(__dirname, "client/dist/index.html"));
     });
 });
