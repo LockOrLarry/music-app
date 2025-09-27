@@ -17,6 +17,16 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 let client;
 
+const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
+
+async function getJwtSecret() {
+  const secret = await secretsClient.send(new GetSecretValueCommand({
+    SecretId: "jamapp/JWT_SECRET"
+  }));
+  return secret.SecretString;
+}
+
 const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
 const ssm = new SSMClient({ region: "ap-southeast-2" });
 
@@ -46,6 +56,7 @@ app.use((req, res, next) => {
 
 const DynamoDBStore = require('connect-dynamodb')(session);
 const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
+const jwtSecret = await getJwtSecret();
 
 app.use(session({
   store: new DynamoDBStore({
@@ -53,7 +64,7 @@ app.use(session({
     table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
     ttl: 86400
   }),
-  secret: process.env.JWT_SECRET,
+  secret: jwtSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
