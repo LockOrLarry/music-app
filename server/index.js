@@ -28,6 +28,28 @@ async function getJamendoClientId() {
   return param.Parameter.Value;
 }
 
+const DynamoDBStore = require('connect-dynamodb')(session);
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+
+const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
+
+app.use(session({
+  store: new DynamoDBStore({
+    client: dynamoClient,
+    table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
+    ttl: 86400
+  }),
+  secret: process.env.JWT_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,
+    sameSite: 'none',
+    httpOnly: true,
+    maxAge: 86400000
+  }
+}));
+
 app.use(express.json());
 app.set('trust proxy', 1);
 
@@ -122,7 +144,11 @@ app.get('/callback', async (req, res) => {
                 console.error('Session save error in callback:', err);
                 return res.redirect('/?error=session_save_failed');
             }
-            res.redirect('/?loggedin=true');
+            req.session.tokenSet = tokenSet;
+            req.session.userInfo = userInfo;
+            req.session.save(() => {
+              res.redirect("/?loggedin=true");
+            });
         });
 
     } catch (err) {
@@ -238,6 +264,7 @@ app.get('/download/:id', checkAuth, async (req, res) => {
 
 // --- Favourites endpoints ---
 app.post('/favourite', checkAuth, async (req, res) => {
+  console.error("*** RJK you have entered /favourite ***")
   try {
     if (!req.isAuthenticated) {
       console.error("Favourite attempt without login", { body: req.body });

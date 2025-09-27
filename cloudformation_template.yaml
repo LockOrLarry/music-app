@@ -74,6 +74,41 @@ Resources:
           systemctl enable nginx
           systemctl restart nginx
 
+  SessionStoreTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: jamapp-sessions
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expires
+        Enabled: true
+      Tags:
+        - Key: Purpose
+          Value: SessionStore
+  
+  SessionStorePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SessionStoreAccess
+      Roles:
+        - CAB432-Instance-Role
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+            Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/jamapp-sessions
+
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
