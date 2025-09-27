@@ -1,9 +1,11 @@
+import fetch from 'node-fetch';
 import express, { json } from 'express';
 import session from 'express-session';
 import { Issuer, generators } from 'openid-client';
 import { join } from 'path';
 import { Buffer } from 'buffer';
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 
 import { transcodeBuffer } from './routes/ffmpeg.js';
 import { searchTracks } from './routes/jamendo.js';
@@ -60,7 +62,8 @@ app.use((req, res, next) => {
   next();
 });
 
-const DynamoDBStore = require('connect-dynamodb')(session);
+const { default: connectDynamoDB } = await import('connect-dynamodb');
+const DynamoDBStore = connectDynamoDB(session);
 const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
 const jwtSecret = await getJwtSecret();
 
@@ -361,7 +364,8 @@ app.get('/myfavourites', checkAuth, async (req, res) => {
 });
 
 // Serve SPA
-app.use(join(__dirname, "client/dist"));
+import { static as serveStatic } from 'express';
+app.use(serveStatic(join(__dirname, "client/dist")));
 
 const spaRoutes = ['/', '/myfavourites'];
 spaRoutes.forEach(route => {
