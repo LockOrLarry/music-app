@@ -1,8 +1,16 @@
 const axios = require("axios");
 require("dotenv").config();
 
+async function getJamendoClientId() {
+  const param = await ssm.send(new GetParameterCommand({
+    Name: "/group39/JamendoClientID",
+    WithDecryption: false
+  }));
+  return param.Parameter.Value;
+}
+
 const JAMENDO_BASE = "https://api.jamendo.com/v3.0";
-const CLIENT_ID = process.env.JAMENDO_CLIENT_ID;
+const CLIENT_ID = getJamendoClientId();
 
 // Search tracks
 async function searchTracks(query) {
@@ -10,14 +18,6 @@ async function searchTracks(query) {
   const res = await axios.get(url);
   return res.data.results;
 }
-
-// async function canDownloadTrack(trackId) {
-//   const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&id=${trackId}`;
-//   const res = await fetch(url);
-//   const data = await res.json();
-//   return data.results[0]?.audiodownload_allowed === true;
-// }
-
 
 // Get stream URL (direct link)
 async function getStream(trackId) {
