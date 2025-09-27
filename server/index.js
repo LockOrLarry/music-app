@@ -6,7 +6,6 @@ const { Buffer } = require('buffer');
 require('dotenv').config();
 
 const { transcodeBuffer } = require('./routes/ffmpeg');
-const db = require('./db');
 const { searchTracks } = require('./routes/jamendo');
 
 const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
