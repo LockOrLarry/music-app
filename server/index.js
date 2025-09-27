@@ -22,9 +22,10 @@ const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
 
 async function getJwtSecret() {
   const secret = await secretsClient.send(new GetSecretValueCommand({
-    SecretId: "jamapp/JWT_SECRET"
+    SecretId: "Group39/MusicApp"
   }));
-  return secret.SecretString;
+  const config = JSON.parse(secret.SecretString);
+  return config.JWT_SECRET;
 }
 
 const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
