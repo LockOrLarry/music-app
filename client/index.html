@@ -9,6 +9,9 @@
   #searchContainer { display: flex; justify-content: center; margin-bottom: 20px; }
   #searchInput { width: 300px; padding: 8px; font-size: 16px; }
   #searchBtn { padding: 8px 16px; margin-left: 8px; font-size: 16px; cursor: pointer; }
+  #oidcLoginBtn {background-color: whitesmoke; color: black;}
+  #favBtn {background-color: #28a745; color: #fff;}
+  #backBtn{background-color:#dc3545 ; color: #fff;}
   #results { max-width: 800px; margin: 0 auto; }
   .track { display: flex; align-items: center; margin-bottom: 12px; background: white; padding: 8px; border-radius: 6px; }
   .track span { flex: 1; font-weight: bold; }
@@ -38,7 +41,6 @@
 const FORMATS = ["mp3", "ogg", "wav", "flac"];
 let isAuthenticated = false;
 let userInfo = {};
-let favouritedIds = []; // GLOBAL favourites array
 
 async function getAuthState() {
   try {
@@ -48,12 +50,10 @@ async function getAuthState() {
     isAuthenticated = data.isAuthenticated;
     userInfo = data.userInfo || {};
     setAuthUI(isAuthenticated, userInfo);
-    if (isAuthenticated) await fetchFavourites();
   } catch {
     isAuthenticated = false;
     userInfo = {};
     setAuthUI(false, {});
-    favouritedIds = [];
   }
 }
 
@@ -69,24 +69,14 @@ function setAuthUI(auth, info) {
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
       <button id="downloadAllFlacBtn" class="authBtn download">Download All FLAC</button>
     `;
-    document.getElementById("logoutBtn").onclick = () => { window.location.href = "/logout"; };
+    document.getElementById("logoutBtn").onclick = () => {
+        window.location.href = "/logout";
+    };
     document.getElementById("favouritesBtn").onclick = showFavouritesPage;
     document.getElementById("downloadAllFlacBtn").onclick = downloadAllFlac;
   } else {
     container.innerHTML = `<button id="oidcLoginBtn" class="authBtn">Login with OIDC</button>`;
     document.getElementById("oidcLoginBtn").onclick = () => { window.location="/login"; };
-  }
-}
-
-async function fetchFavourites() {
-  try {
-    const res = await fetch("/myfavourites", { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      favouritedIds = (data.results || []).map(t => t.id);
-    }
-  } catch (err) {
-    console.error("Failed to fetch favourites:", err);
   }
 }
 
@@ -103,13 +93,25 @@ async function searchTracks() {
   }
 }
 
-function renderTracks(tracks) {
+async function renderTracks(tracks) {
   const resultsDiv = document.getElementById("results");
-  resultsDiv.innerHTML = "";
-
+  resultsDiv.querySelectorAll(".track").forEach(t => t.remove());
   if (!tracks || tracks.length === 0) {
     resultsDiv.innerHTML = "<p>No tracks found</p>";
     return;
+  }
+
+  let favouritedIds = [];
+  if (isAuthenticated) {
+    try {
+      const res = await fetch("/myfavourites", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        favouritedIds = (data.results || []).map(t => t.id);
+      }
+    } catch (err) {
+      console.error("Failed to fetch favourites for button states:", err);
+    }
   }
 
   tracks.forEach(track => {
@@ -133,7 +135,7 @@ function renderTracks(tracks) {
 
     if (isAuthenticated) {
         const favBtn = document.createElement("button");
-        favBtn.id = "favBtn";
+        favBtn.id = "favBtn"
         favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
         favBtn.className = "authBtn";
         favBtn.onclick = async () => {
@@ -147,10 +149,16 @@ function renderTracks(tracks) {
             });
 
             if (res.ok) {
-                if (isFav) favouritedIds = favouritedIds.filter(id => id !== track.id);
-                else favouritedIds.push(track.id);
-                favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
-                if (location.pathname === "/myfavourites" && isFav) trackDiv.remove();
+                if (isFav) {
+                    favouritedIds = favouritedIds.filter(id => id !== track.id);
+                    favBtn.textContent = "Favourite";
+                    if (document.location.pathname === "/myfavourites") {
+                        trackDiv.remove();
+                    }
+                } else {
+                    favouritedIds.push(track.id);
+                    favBtn.textContent = "Unfavourite";
+                }
             } else {
                 console.error("Favourite toggle failed", await res.json());
             }
@@ -166,15 +174,17 @@ async function showFavouritesPage() {
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
 
-    // Remove existing back button if present
-    const existingBack = document.getElementById("backBtn");
-    if (existingBack) existingBack.remove();
+    // Back button
+    const backBtn = document.createElement("button");
+    backBtn.id = "backBtn"
+    backBtn.textContent = "Back to Search";
+    backBtn.className = "authBtn";
+    backBtn.onclick = showSearchPage;
 
     history.pushState({}, "", "/myfavourites");
     document.getElementById("searchContainer").style.display = "none";
     document.querySelector("h1").textContent = "Favourites";
 
-    await fetchFavourites();
     try {
         const res = await fetch("/myfavourites", { credentials: "include" });
         if (!res.ok) throw new Error(res.statusText);
@@ -184,13 +194,6 @@ async function showFavouritesPage() {
         resultsDiv.innerHTML += `<p>Error fetching favourites: ${err.message}</p>`;
         console.error("Error fetching favourites:", err);
     }
-
-    // Back button
-    const backBtn = document.createElement("button");
-    backBtn.id = "backBtn";
-    backBtn.textContent = "Back to Search";
-    backBtn.className = "authBtn";
-    backBtn.onclick = showSearchPage;
     resultsDiv.appendChild(backBtn);
 }
 
@@ -199,6 +202,8 @@ function showSearchPage() {
   document.getElementById("searchContainer").style.display = "flex";
   document.querySelector("h1").textContent = "Jamendo Track Search";
   document.getElementById("results").innerHTML = "";
+  // Clear any existing search results and reset the page
+  searchTracks(); // Re-run the last search or show empty state
 }
 
 function downloadAllFlac() {
@@ -224,7 +229,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("loggedin")) {
     window.history.replaceState({}, "", "/");
-    setTimeout(getAuthState, 100);
+    setTimeout(getAuthState, 100); // slight delay to ensure session cookie is set
   } else {
     getAuthState();
   }
