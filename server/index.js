@@ -54,6 +54,7 @@ app.use((req, res, next) => {
   next();
 });
 
+
 const DynamoDBStore = require('connect-dynamodb')(session);
 const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
 
@@ -85,6 +86,10 @@ const checkAuth = (req, res, next) => {
     req.isAuthenticated = !!req.session.userInfo;
     next();
 };
+
+function isGoogleUser(userInfo) {
+  return typeof userInfo.sub === 'string' && userInfo.sub.startsWith('Google_');
+}
 
 
 // --- Jamendo endpoints ---
@@ -251,6 +256,11 @@ async function startServer() {
           console.error("Favourite attempt without login", { body: req.body });
           return res.status(401).json({ error: 'Not logged in' });
         }
+        if (!isGoogleUser(req.session.userInfo)) {
+          console.error("Access denied: non-Google user", { user: req.session.userInfo });
+          return res.status(403).json({ error: 'Only Google users can use favourites' });
+        }
+
 
         const { trackId } = req.body;
         if (!trackId) {
@@ -280,6 +290,10 @@ async function startServer() {
           console.error("Unfavourite attempt without login", { body: req.body });
           return res.status(401).json({ error: 'Not logged in' });
         }
+        if (!isGoogleUser(req.session.userInfo)) {
+          console.error("Access denied: non-Google user", { user: req.session.userInfo });
+          return res.status(403).json({ error: 'Only Google users can use favourites' });
+        }
 
         const { trackId } = req.body;
         if (!trackId) {
@@ -308,6 +322,10 @@ async function startServer() {
         if (!req.isAuthenticated) {
           console.error("Fetching favourites without login");
           return res.status(401).json({ error: 'Not logged in' });
+        }
+        if (!isGoogleUser(req.session.userInfo)) {
+          console.error("Access denied: non-Google user", { user: req.session.userInfo });
+          return res.status(403).json({ error: 'Only Google users can use favourites' });
         }
 
         console.error("Fetching favourites for user", req.session.userInfo.sub);
