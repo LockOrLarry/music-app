@@ -66,7 +66,7 @@ function setAuthUI(auth, info) {
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
       <button id="downloadAllFlacBtn" class="authBtn download">Download All FLAC</button>
     `;
-    dodocument.getElementById("logoutBtn").onclick = () => {
+    document.getElementById("logoutBtn").onclick = () => {
         window.location.href = "/logout";
     };
     document.getElementById("favouritesBtn").onclick = showFavouritesPage;
