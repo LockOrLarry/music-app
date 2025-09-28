@@ -9,6 +9,9 @@
   #searchContainer { display: flex; justify-content: center; margin-bottom: 20px; }
   #searchInput { width: 300px; padding: 8px; font-size: 16px; }
   #searchBtn { padding: 8px 16px; margin-left: 8px; font-size: 16px; cursor: pointer; }
+  #oidcLoginBtn {background-color: aquamarine; color: #fff;}
+  #favBtn {background-color: bisque; color: #fff;}
+  #backBtn{background-color:darkkhaki ; color: #fff;}
   #results { max-width: 800px; margin: 0 auto; }
   .track { display: flex; align-items: center; margin-bottom: 12px; background: white; padding: 8px; border-radius: 6px; }
   .track span { flex: 1; font-weight: bold; }
@@ -132,6 +135,7 @@ async function renderTracks(tracks) {
 
     if (isAuthenticated) {
         const favBtn = document.createElement("button");
+        favBtn.id = "favBtn"
         favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
         favBtn.className = "authBtn";
         favBtn.onclick = async () => {
@@ -161,6 +165,7 @@ async function showFavouritesPage() {
 
     // Back button
     const backBtn = document.createElement("button");
+    backBtn.id = "backBtn"
     backBtn.textContent = "Back to Search";
     backBtn.className = "authBtn";
     backBtn.onclick = showSearchPage;
@@ -179,6 +184,7 @@ async function showFavouritesPage() {
         resultsDiv.innerHTML += `<p>Error fetching favourites: ${err.message}</p>`;
         console.error("Error fetching favourites:", err);
     }
+    resultsDiv.appendChild(backBtn);
 }
 
 function showSearchPage() {
