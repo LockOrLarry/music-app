@@ -95,7 +95,7 @@ async function searchTracks() {
 
 async function renderTracks(tracks) {
   const resultsDiv = document.getElementById("results");
-  resultsDiv.innerHTML = "";
+  resultsDiv.querySelectorAll(".track").forEach(t => t.remove());
   if (!tracks || tracks.length === 0) {
     resultsDiv.innerHTML = "<p>No tracks found</p>";
     return;
@@ -139,17 +139,28 @@ async function renderTracks(tracks) {
         favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
         favBtn.className = "authBtn";
         favBtn.onclick = async () => {
-            const endpoint = favouritedIds.includes(track.id) ? "/unfavourite" : "/favourite";
-            await fetch(endpoint, {
+            const isFav = favouritedIds.includes(track.id);
+            const endpoint = isFav ? "/unfavourite" : "/favourite";
+            const res = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ trackId: track.id }),
                 credentials: "include"
             });
-            if (document.location.pathname === "/myfavourites") {
-                showFavouritesPage();
+
+            if (res.ok) {
+                if (isFav) {
+                    favouritedIds = favouritedIds.filter(id => id !== track.id);
+                    favBtn.textContent = "Favourite";
+                    if (document.location.pathname === "/myfavourites") {
+                        trackDiv.remove();
+                    }
+                } else {
+                    favouritedIds.push(track.id);
+                    favBtn.textContent = "Unfavourite";
+                }
             } else {
-                searchTracks();
+                console.error("Favourite toggle failed", await res.json());
             }
         };
         trackDiv.appendChild(favBtn);
@@ -169,7 +180,6 @@ async function showFavouritesPage() {
     backBtn.textContent = "Back to Search";
     backBtn.className = "authBtn";
     backBtn.onclick = showSearchPage;
-    resultsDiv.appendChild(backBtn);
 
     history.pushState({}, "", "/myfavourites");
     document.getElementById("searchContainer").style.display = "none";
