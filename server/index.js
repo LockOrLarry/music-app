@@ -88,7 +88,13 @@ const checkAuth = (req, res, next) => {
 };
 
 function isGoogleUser(userInfo) {
-  return typeof userInfo.sub === 'string' && userInfo.sub.startsWith('Google_');
+  try {
+    const identities = JSON.parse(userInfo.identities || '[]');
+    return identities.some(id => id.providerName === 'Google');
+  } catch (err) {
+    console.error("Failed to parse identities:", err);
+    return false;
+  }
 }
 
 
