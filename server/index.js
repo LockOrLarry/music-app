@@ -27,7 +27,7 @@ const ssm = new SSMClient({ region: "ap-southeast-2" });
 
 async function getJamendoClientId() {
   const param = await ssm.send(new GetParameterCommand({
-    Name: "/group39/JamendoClientID",
+    Name: "/jamapp/JamendoClientID",
     WithDecryption: false
   }));
   return param.Parameter.Value;

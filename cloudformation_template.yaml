@@ -69,6 +69,13 @@ Resources:
       Type: String
       Value: !Ref FavouritesTable
 
+  JamendoClientIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/JamendoClientID
+      Type: String
+      Value: 8d0c92e6
+
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
