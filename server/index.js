@@ -8,11 +8,6 @@ require('dotenv').config();
 const { transcodeBuffer } = require('./routes/ffmpeg');
 const { searchTracks } = require('./routes/jamendo');
 
-const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
-const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
-const FAVOURITES_TABLE = process.env.DYNAMO_FAVOURITES_TABLE;
-const PORT = process.env.PORT || 5000;
-
 const app = express();
 let client;
 
@@ -54,21 +49,25 @@ app.use((req, res, next) => {
   next();
 });
 
+async function getFavouritesTableName() {
+  const param = await ssm.send(new GetParameterCommand({
+    Name: "/jamapp/FavouritesTableName",
+    WithDecryption: false
+  }));
+  return param.Parameter.Value;
+}
 
-const DynamoDBStore = require('connect-dynamodb')(session);
-const dynamoClient = new DynamoDBClient({ region: 'ap-southeast-2' });
+const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
+const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
+const PORT = process.env.PORT;
 
 let jwtSecret;
 
 async function initializeApp() {
+    const FAVOURITES_TABLE = await getFavouritesTableName();
     jwtSecret = await getJwtSecret();
     
     app.use(session({
-        store: new DynamoDBStore({
-            client: dynamoClient,
-            table: process.env.SESSION_TABLE_NAME || 'jamapp-sessions',
-            ttl: 86400
-        }),
         secret: jwtSecret,
         resave: false,
         saveUninitialized: false,
