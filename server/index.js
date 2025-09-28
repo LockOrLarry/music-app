@@ -59,12 +59,13 @@ async function getFavouritesTableName() {
 
 const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
+let FAVOURITES_TABLE;
 const PORT = process.env.PORT;
 
 let jwtSecret;
 
 async function initializeApp() {
-    const FAVOURITES_TABLE = await getFavouritesTableName();
+    FAVOURITES_TABLE = await getFavouritesTableName();
     jwtSecret = await getJwtSecret();
     
     app.use(session({
