@@ -1,61 +1,31 @@
-const Memcached = require("memcached");
-const util = require("node:util");
+// server/index.js
+import fs from 'fs/promises';
+import Memcached from 'memcached';
+import path from 'path';
 
-// Replace this with the endpoint for your Elasticache instance
-const memcachedAddress =
-   "something.cfg.apse2.cache.amazonaws.com:11211";
-const URL = "https://en.wikipedia.org/wiki/Memcached";
+const memcachedAddress = 'jamapp-logo.km2jzi.cfg.apse2.cache.amazonaws.com:11211'; // replace with your endpoint
 
-// For convenience using a global for the memcached server
-var memcached = false;
+const memcached = new Memcached(memcachedAddress);
 
-function connectToMemcached() {
-   memcached = new Memcached(memcachedAddress);
-   memcached.on("failure", (details) => {
-      console.log("Memcached server failure: ", details);
-   });
+memcached.aSet = (key, value, ttlSeconds = 0) =>
+  new Promise((resolve, reject) => memcached.set(key, value, ttlSeconds, err => (err ? reject(err) : resolve())));
+memcached.aGet = key =>
+  new Promise((resolve, reject) => memcached.get(key, (err, data) => (err ? reject(err) : resolve(data))));
 
-   // Monkey patch some functions for convenience
-   // We can call these with async
-   memcached.aGet = util.promisify(memcached.get);
-   memcached.aSet = util.promisify(memcached.set);
+async function cacheImage() {
+  const filePath = path.resolve('./jam_PNG12-1738560013.png');                // point to your uploaded file
+  const fileBuffer = await fs.readFile(filePath);            // returns a Buffer
+  await memcached.aSet('jam_app', fileBuffer, 0);           // cache for 5 minutes
+  console.log('Stored image as jam_app');
+
+  const cached = await memcached.aGet('jam_app');
+  if (!cached) throw new Error('jam_app not found in cache');
+  await fs.writeFile('./jam-from-cache.png', cached);        // optional verification step
+  console.log('Retrieved cached image and wrote jam-from-cache.png');
+  memcached.end();
 }
 
-async function cachedFetch(URL) {
-   // Check to see if the URL is in the cache
-   const value = await memcached.aGet(URL);
-   if (value) {
-      return value;
-   }
-   console.log("Cache miss");
-
-   // Cache doesn't have the value, so get it
-   const response = await fetch(URL);
-   const fetchedValue = await response.text();
-   
-   // Cache the data with TTL of 10 seconds
-   await memcached.aSet(URL, fetchedValue, 10);
-   return fetchedValue;
-}
-
-async function main() {
-   connectToMemcached();
-
-   // Let's see how long it takes to get from the external API
-   console.time("not cached");
-   await fetch(URL);
-   console.timeEnd("not cached");
-
-   // Now we'll do 10 cached fetches to see the time difference.
-   for (i = 0; i < 10; i++) {
-      console.time("cached");
-      try {
-         const data = await cachedFetch(URL);
-      } catch (Err) {
-         console.log(Err);
-      }
-      console.timeEnd("cached");
-   }
-}
-
-main();
+cacheImage().catch(err => {
+  console.error(err);
+  memcached.end();
+});
