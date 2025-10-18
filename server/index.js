@@ -3,6 +3,8 @@ const session = require('express-session');
 const { Issuer, generators } = require('openid-client');
 const path = require('path');
 const { Buffer } = require('buffer');
+const Memcached = require('memcached');
+const { promisify } = require('util');
 require('dotenv').config();
 
 const { transcodeBuffer } = require('./routes/ffmpeg');
@@ -63,6 +65,56 @@ let FAVOURITES_TABLE;
 const PORT = process.env.PORT;
 
 let jwtSecret;
+const MEMCACHED_ENDPOINT = process.env.MEMCACHED_ENDPOINT || "jamapp-logo.km2jzi.cfg.apse2.cache.amazonaws.com:11211";
+let memcachedClient;
+let memcachedGet;
+
+function initializeMemcached() {
+  if (memcachedClient || !MEMCACHED_ENDPOINT) return;
+
+  memcachedClient = new Memcached(MEMCACHED_ENDPOINT, {
+    buffer: true,
+    retries: 1,
+    retry: 1000,
+    remove: true,
+    timeout: 5000,
+    idle: 5000
+  });
+
+  memcachedClient.on("issue", details => console.error("Memcached issue:", details));
+  memcachedClient.on("failure", details => console.error("Memcached failure:", details));
+  memcachedClient.on("reconnecting", details => console.error("Memcached reconnecting:", details));
+
+  memcachedGet = promisify(memcachedClient.get).bind(memcachedClient);
+}
+
+async function getLogoBuffer() {
+  if (!memcachedGet) {
+    initializeMemcached();
+  }
+
+  if (!memcachedGet) {
+    throw new Error("Memcached client unavailable");
+  }
+
+  const logoKey = "jam_png";
+  const cachedValue = await memcachedGet(logoKey);
+
+  if (!cachedValue) {
+    throw new Error("Logo not found in cache");
+  }
+
+  if (Buffer.isBuffer(cachedValue)) {
+    return cachedValue;
+  }
+
+  try {
+    return Buffer.from(cachedValue, "base64");
+  } catch (err) {
+    console.error("Failed to decode logo from cache:", err);
+    return Buffer.from(cachedValue);
+  }
+}
 
 async function initializeApp() {
     FAVOURITES_TABLE = await getFavouritesTableName();
@@ -105,6 +157,7 @@ async function startServer() {
     CLIENT_ID = await getJamendoClientId();
 
     await initializeApp();
+    initializeMemcached();
     
     // Manual issuer configuration for Cognito
     const issuer = new Issuer({
@@ -367,6 +420,18 @@ async function startServer() {
       } catch (err) {
         console.error("DynamoDB query error in /myfavourites:", err, { session: req.session.userInfo });
         res.status(500).json({ error: "Failed to fetch favourites" });
+      }
+    });
+
+    app.get("/logo", async (req, res) => {
+      try {
+        const logoBuffer = await getLogoBuffer();
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=300, must-revalidate");
+        res.send(logoBuffer);
+      } catch (err) {
+        console.error("Logo retrieval error:", err);
+        res.status(503).json({ error: "Logo unavailable" });
       }
     });
 

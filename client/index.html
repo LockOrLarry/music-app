@@ -5,7 +5,9 @@
 <title>Jamapp</title>
 <style>
   body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
-  h1 { text-align: center; }
+  #appHeader { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 20px; }
+  #appLogo { display: none; height: 64px; width: 64px; object-fit: contain; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  #appTitle { text-align: center; margin: 0; }
   #searchContainer { display: flex; justify-content: center; margin-bottom: 20px; }
   #searchInput { width: 300px; padding: 8px; font-size: 16px; }
   #searchBtn { padding: 8px 16px; margin-left: 8px; font-size: 16px; cursor: pointer; }
@@ -29,7 +31,10 @@
 
 <div id="loginContainer"></div>
 
-<h1>Jamapp</h1>
+<div id="appHeader">
+  <img id="appLogo" alt="Jamendo logo" />
+  <h1 id="appTitle">Jamapp</h1>
+</div>
 <div id="searchContainer">
   <input type="text" id="searchInput" placeholder="Enter search term..." />
   <button id="searchBtn">Search</button>
@@ -42,6 +47,7 @@ const FORMATS = ["mp3", "ogg", "wav", "flac"];
 let isAuthenticated = false;
 let userInfo = {};
 let favouritedIds = [];
+let logoObjectUrl;
 
 async function getAuthState() {
   try {
@@ -104,6 +110,27 @@ async function fetchFavourites() {
   } catch (err) {
     favouritedIds = [];
     throw err;
+  }
+}
+
+async function loadLogo() {
+  const logoEl = document.getElementById("appLogo");
+  if (!logoEl) return;
+
+  try {
+    const res = await fetch("/logo", { credentials: "include" });
+    if (!res.ok) throw new Error(res.statusText || "Logo request failed");
+
+    const blob = await res.blob();
+    if (logoObjectUrl) {
+      URL.revokeObjectURL(logoObjectUrl);
+    }
+    logoObjectUrl = URL.createObjectURL(blob);
+    logoEl.src = logoObjectUrl;
+    logoEl.style.display = "block";
+  } catch (err) {
+    console.error("Failed to load logo:", err);
+    logoEl.remove();
   }
 }
 
@@ -199,7 +226,8 @@ async function showFavouritesPage() {
 
     history.pushState({}, "", "/myfavourites");
     document.getElementById("searchContainer").style.display = "none";
-    document.querySelector("h1").textContent = "Favourites";
+    const title = document.getElementById("appTitle");
+    if (title) title.textContent = "Favourites";
 
     try {
         const favourites = await fetchFavourites();
@@ -214,7 +242,8 @@ async function showFavouritesPage() {
 function showSearchPage() {
   history.pushState({}, "", "/");
   document.getElementById("searchContainer").style.display = "flex";
-  document.querySelector("h1").textContent = "Jamapp";
+  const title = document.getElementById("appTitle");
+  if (title) title.textContent = "Jamapp";
   document.getElementById("results").innerHTML = "";
   // Clear any existing search results and reset the page
   searchTracks(); // Re-run the last search or show empty state
@@ -240,12 +269,20 @@ window.addEventListener("popstate", () => { location.pathname === "/myfavourites
 document.getElementById("searchBtn").addEventListener("click", searchTracks);
 document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") searchTracks(); });
 document.addEventListener("DOMContentLoaded", function() {
+  loadLogo();
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("loggedin")) {
     window.history.replaceState({}, "", "/");
     setTimeout(getAuthState, 100); // slight delay to ensure session cookie is set
   } else {
     getAuthState();
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (logoObjectUrl) {
+    URL.revokeObjectURL(logoObjectUrl);
+    logoObjectUrl = null;
   }
 });
 </script>
