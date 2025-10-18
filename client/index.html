@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Jamendo Track Search</title>
+<title>Jamapp</title>
 <style>
   body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
   h1 { text-align: center; }
@@ -29,7 +29,7 @@
 
 <div id="loginContainer"></div>
 
-<h1>Jamendo Track Search</h1>
+<h1>Jamapp</h1>
 <div id="searchContainer">
   <input type="text" id="searchInput" placeholder="Enter search term..." />
   <button id="searchBtn">Search</button>
@@ -41,6 +41,7 @@
 const FORMATS = ["mp3", "ogg", "wav", "flac"];
 let isAuthenticated = false;
 let userInfo = {};
+let favouritedIds = [];
 
 async function getAuthState() {
   try {
@@ -50,10 +51,20 @@ async function getAuthState() {
     isAuthenticated = data.isAuthenticated;
     userInfo = data.userInfo || {};
     setAuthUI(isAuthenticated, userInfo);
+    if (isAuthenticated) {
+      try {
+        await fetchFavourites();
+      } catch (err) {
+        console.error("Failed to load favourites:", err);
+      }
+    } else {
+      favouritedIds = [];
+    }
   } catch {
     isAuthenticated = false;
     userInfo = {};
     setAuthUI(false, {});
+    favouritedIds = [];
   }
 }
 
@@ -67,7 +78,7 @@ function setAuthUI(auth, info) {
       </span>
       <button id="logoutBtn" class="authBtn logout">Log Out</button>
       <button id="favouritesBtn" class="authBtn favourites">Favourites</button>
-      <button id="downloadAllFlacBtn" class="authBtn download">Download All FLAC</button>
+      <button id="downloadAllFlacBtn" class="authBtn download">Download Favourites (FLAC)</button>
     `;
     document.getElementById("logoutBtn").onclick = () => {
         window.location.href = "/logout";
@@ -77,6 +88,22 @@ function setAuthUI(auth, info) {
   } else {
     container.innerHTML = `<button id="oidcLoginBtn" class="authBtn">Login with OIDC</button>`;
     document.getElementById("oidcLoginBtn").onclick = () => { window.location="/login"; };
+  }
+}
+
+async function fetchFavourites() {
+  try {
+    const res = await fetch("/myfavourites", { credentials: "include" });
+    if (!res.ok) {
+      throw new Error(res.statusText || "Failed to fetch favourites");
+    }
+    const data = await res.json();
+    const results = data.results || [];
+    favouritedIds = results.map(track => String(track.id));
+    return results;
+  } catch (err) {
+    favouritedIds = [];
+    throw err;
   }
 }
 
@@ -93,25 +120,13 @@ async function searchTracks() {
   }
 }
 
-async function renderTracks(tracks) {
+function renderTracks(tracks) {
   const resultsDiv = document.getElementById("results");
-  resultsDiv.querySelectorAll(".track").forEach(t => t.remove());
+  resultsDiv.innerHTML = "";
+
   if (!tracks || tracks.length === 0) {
     resultsDiv.innerHTML = "<p>No tracks found</p>";
     return;
-  }
-
-  let favouritedIds = [];
-  if (isAuthenticated) {
-    try {
-      const res = await fetch("/myfavourites", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        favouritedIds = (data.results || []).map(t => t.id);
-      }
-    } catch (err) {
-      console.error("Failed to fetch favourites for button states:", err);
-    }
   }
 
   tracks.forEach(track => {
@@ -127,43 +142,44 @@ async function renderTracks(tracks) {
 
     FORMATS.forEach(format => {
       const btn = document.createElement("button");
-      btn.textContent = `Download ${format.toUpperCase()}`;
+      btn.textContent = `${format.toUpperCase()}`;
       btn.className = (format === "mp3" ? "original" : "transcode");
       btn.onclick = () => window.location = `/download/${track.id}?format=${format}`;
       trackDiv.appendChild(btn);
     });
 
     if (isAuthenticated) {
-        const favBtn = document.createElement("button");
-        favBtn.id = "favBtn"
-        favBtn.textContent = favouritedIds.includes(track.id) ? "Unfavourite" : "Favourite";
-        favBtn.className = "authBtn";
-        favBtn.onclick = async () => {
-            const isFav = favouritedIds.includes(track.id);
-            const endpoint = isFav ? "/unfavourite" : "/favourite";
-            const res = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ trackId: track.id }),
-                credentials: "include"
-            });
+      const trackId = String(track.id);
+      const favBtn = document.createElement("button");
+      favBtn.id = "favBtn";
+      favBtn.textContent = favouritedIds.includes(trackId) ? "Unfavourite" : "Favourite";
+      favBtn.className = "authBtn";
+      favBtn.onclick = async () => {
+        const isFav = favouritedIds.includes(trackId);
+        const endpoint = isFav ? "/unfavourite" : "/favourite";
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trackId: track.id }),
+          credentials: "include"
+        });
 
-            if (res.ok) {
-                if (isFav) {
-                    favouritedIds = favouritedIds.filter(id => id !== track.id);
-                    favBtn.textContent = "Favourite";
-                    if (document.location.pathname === "/myfavourites") {
-                        trackDiv.remove();
-                    }
-                } else {
-                    favouritedIds.push(track.id);
-                    favBtn.textContent = "Unfavourite";
-                }
-            } else {
-                console.error("Favourite toggle failed", await res.json());
+        if (res.ok) {
+          if (isFav) {
+            favouritedIds = favouritedIds.filter(id => id !== trackId);
+            favBtn.textContent = "Favourite";
+            if (window.location.pathname === "/myfavourites") {
+              trackDiv.remove();
             }
-        };
-        trackDiv.appendChild(favBtn);
+          } else {
+            favouritedIds.push(trackId);
+            favBtn.textContent = "Unfavourite";
+          }
+        } else {
+          console.error("Favourite toggle failed", await res.json());
+        }
+      };
+      trackDiv.appendChild(favBtn);
     }
 
     resultsDiv.appendChild(trackDiv);
@@ -186,12 +202,10 @@ async function showFavouritesPage() {
     document.querySelector("h1").textContent = "Favourites";
 
     try {
-        const res = await fetch("/myfavourites", { credentials: "include" });
-        if (!res.ok) throw new Error(res.statusText);
-        const data = await res.json();
-        renderTracks(data.results || []);
+        const favourites = await fetchFavourites();
+        renderTracks(favourites);
     } catch (err) {
-        resultsDiv.innerHTML += `<p>Error fetching favourites: ${err.message}</p>`;
+        resultsDiv.innerHTML = `<p>Error fetching favourites: ${err.message}</p>`;
         console.error("Error fetching favourites:", err);
     }
     resultsDiv.appendChild(backBtn);
@@ -200,7 +214,7 @@ async function showFavouritesPage() {
 function showSearchPage() {
   history.pushState({}, "", "/");
   document.getElementById("searchContainer").style.display = "flex";
-  document.querySelector("h1").textContent = "Jamendo Track Search";
+  document.querySelector("h1").textContent = "Jamapp";
   document.getElementById("results").innerHTML = "";
   // Clear any existing search results and reset the page
   searchTracks(); // Re-run the last search or show empty state
