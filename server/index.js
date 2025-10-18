@@ -15,6 +15,7 @@ let client;
 
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 const secretsClient = new SecretsManagerClient({ region: "ap-southeast-2" });
+const { LambdaClient, InvokeCommand } = require("@aws-sdk/client-lambda");
 
 async function getJwtSecret() {
   const secret = await secretsClient.send(new GetSecretValueCommand({
@@ -68,6 +69,19 @@ let jwtSecret;
 const MEMCACHED_ENDPOINT = process.env.MEMCACHED_ENDPOINT || "jamapp-logo.km2jzi.cfg.apse2.cache.amazonaws.com:11211";
 let memcachedClient;
 let memcachedGet;
+let memcachedSet;
+
+const ALBUM_ART_LAMBDA = process.env.ALBUM_ART_LAMBDA;
+const ALBUM_ART_CACHE_PREFIX = process.env.ALBUM_ART_CACHE_PREFIX || "album_art:";
+const parsedAlbumArtTtl = parseInt(process.env.ALBUM_ART_TTL_SECONDS || "300", 10);
+const ALBUM_ART_TTL_SECONDS = Number.isFinite(parsedAlbumArtTtl) && parsedAlbumArtTtl > 0 ? parsedAlbumArtTtl : 300;
+const parsedAlbumArtWidth = parseInt(process.env.ALBUM_ART_WIDTH || "96", 10);
+const ALBUM_ART_WIDTH = Number.isFinite(parsedAlbumArtWidth) && parsedAlbumArtWidth > 0 ? parsedAlbumArtWidth : 96;
+const ALBUM_ART_ALLOWED_HOST = process.env.ALBUM_ART_ALLOWED_HOST || "usercontent.jamendo.com";
+
+const lambdaClient = ALBUM_ART_LAMBDA
+  ? new LambdaClient({ region: process.env.AWS_REGION || "ap-southeast-2" })
+  : null;
 
 function initializeMemcached() {
   if (memcachedClient || !MEMCACHED_ENDPOINT) return;
@@ -86,6 +100,7 @@ function initializeMemcached() {
   memcachedClient.on("reconnecting", details => console.error("Memcached reconnecting:", details));
 
   memcachedGet = promisify(memcachedClient.get).bind(memcachedClient);
+  memcachedSet = promisify(memcachedClient.set).bind(memcachedClient);
 }
 
 async function getLogoBuffer() {
@@ -114,6 +129,114 @@ async function getLogoBuffer() {
     console.error("Failed to decode logo from cache:", err);
     return Buffer.from(cachedValue);
   }
+}
+
+function sanitizeAlbumImageUrl(rawUrl) {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return null;
+    const host = parsed.hostname.toLowerCase();
+    const allowed = ALBUM_ART_ALLOWED_HOST.toLowerCase();
+    if (host === allowed || host.endsWith(`.${allowed}`)) {
+      return parsed.toString();
+    }
+  } catch (err) {
+    console.error("Invalid album art URL:", err);
+  }
+  return null;
+}
+
+async function invokeAlbumArtLambda(trackId, imageUrl, cacheKey) {
+  if (!lambdaClient || !ALBUM_ART_LAMBDA) {
+    throw new Error("Album art lambda not configured");
+  }
+
+  const payload = {
+    trackId,
+    imageUrl,
+    cacheKey,
+    width: ALBUM_ART_WIDTH,
+    ttlSeconds: ALBUM_ART_TTL_SECONDS
+  };
+
+  const command = new InvokeCommand({
+    FunctionName: ALBUM_ART_LAMBDA,
+    Payload: Buffer.from(JSON.stringify(payload))
+  });
+
+  const response = await lambdaClient.send(command);
+
+  if (response.FunctionError) {
+    throw new Error(`Lambda error: ${response.FunctionError}`);
+  }
+
+  const rawPayload = Buffer.from(response.Payload || []).toString() || "{}";
+  let parsed;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch (err) {
+    throw new Error("Failed to parse album art lambda response");
+  }
+
+  if (parsed.error) {
+    throw new Error(parsed.error);
+  }
+
+  if (!parsed.base64Image) {
+    throw new Error("Album art lambda response missing base64Image");
+  }
+
+  return Buffer.from(parsed.base64Image, "base64");
+}
+
+async function getAlbumArtBuffer(trackId, imageUrl) {
+  if (!trackId) {
+    throw new Error("Missing trackId");
+  }
+
+  if (!memcachedGet) {
+    initializeMemcached();
+  }
+
+  if (!memcachedGet) {
+    throw new Error("Memcached client unavailable");
+  }
+
+  const cacheKey = `${ALBUM_ART_CACHE_PREFIX}${trackId}`;
+
+  let cachedValue;
+  try {
+    cachedValue = await memcachedGet(cacheKey);
+  } catch (err) {
+    console.error(`Memcached get failed for ${cacheKey}:`, err);
+  }
+
+  if (cachedValue) {
+    if (Buffer.isBuffer(cachedValue)) {
+      return cachedValue;
+    }
+    try {
+      return Buffer.from(cachedValue, "base64");
+    } catch (err) {
+      console.error(`Failed to decode cached album art for ${cacheKey}:`, err);
+    }
+  }
+
+  const sanitizedUrl = sanitizeAlbumImageUrl(imageUrl);
+  if (!sanitizedUrl) {
+    throw new Error("Invalid album art URL");
+  }
+
+  const buffer = await invokeAlbumArtLambda(trackId, sanitizedUrl, cacheKey);
+
+  if (memcachedSet) {
+    memcachedSet(cacheKey, buffer, ALBUM_ART_TTL_SECONDS).catch(err => {
+      console.error(`Memcached set failed for ${cacheKey}:`, err);
+    });
+  }
+
+  return buffer;
 }
 
 async function initializeApp() {
@@ -271,6 +394,25 @@ async function startServer() {
             res.json({ results });
         } catch (err) {
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.get('/album-art', checkAuth, async (req, res) => {
+        try {
+            const { trackId, imageUrl } = req.query;
+
+            if (!trackId || !imageUrl) {
+                return res.status(400).json({ error: 'Missing trackId or imageUrl' });
+            }
+
+            const buffer = await getAlbumArtBuffer(String(trackId), String(imageUrl));
+
+            res.setHeader("Content-Type", "image/png");
+            res.setHeader("Cache-Control", `public, max-age=${Math.max(ALBUM_ART_TTL_SECONDS, 1)}, must-revalidate`);
+            res.send(buffer);
+        } catch (err) {
+            console.error("Album art retrieval error:", err);
+            res.status(503).json({ error: 'Album art unavailable' });
         }
     });
 

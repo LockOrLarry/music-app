@@ -1,0 +1,11 @@
+{
+  "name": "jamapp-album-art-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "memcached": "^2.2.2",
+    "sharp": "^0.33.5"
+  }
+}
