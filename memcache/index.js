@@ -1,7 +1,6 @@
-// server/index.js
-import fs from 'fs/promises';
-import Memcached from 'memcached';
-import path from 'path';
+const fs = require('fs/promises');
+const Memcached = require('memcached');
+const path = require('path');
 
 const memcachedAddress = 'jamapp-logo.km2jzi.cfg.apse2.cache.amazonaws.com:11211'; // replace with your endpoint
 
@@ -15,13 +14,11 @@ memcached.aGet = key =>
 async function cacheImage() {
   const filePath = path.resolve('./jam_PNG12-1738560013.png');                // point to your uploaded file
   const fileBuffer = await fs.readFile(filePath);            // returns a Buffer
-  await memcached.aSet('jam_app', fileBuffer, 0);           // cache for 5 minutes
-  console.log('Stored image as jam_app');
+  await memcached.aSet('jam_png', fileBuffer, 0);           // cache for 5 minutes
+  console.log('Stored image as jam_png');
 
-  const cached = await memcached.aGet('jam_app');
+  const cached = await memcached.aGet('jam_png');
   if (!cached) throw new Error('jam_app not found in cache');
-  await fs.writeFile('./jam-from-cache.png', cached);        // optional verification step
-  console.log('Retrieved cached image and wrote jam-from-cache.png');
   memcached.end();
 }
 
