@@ -19,6 +19,7 @@ RUN apt-get update \
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY server ./
+COPY shared ./shared
 COPY --from=client-build /usr/src/client/dist ./client/dist
 
 EXPOSE 5000
