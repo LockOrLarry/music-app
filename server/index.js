@@ -78,6 +78,7 @@ const ALBUM_ART_TTL_SECONDS = Number.isFinite(parsedAlbumArtTtl) && parsedAlbumA
 const parsedAlbumArtWidth = parseInt(process.env.ALBUM_ART_WIDTH || "96", 10);
 const ALBUM_ART_WIDTH = Number.isFinite(parsedAlbumArtWidth) && parsedAlbumArtWidth > 0 ? parsedAlbumArtWidth : 96;
 const ALBUM_ART_ALLOWED_HOST = process.env.ALBUM_ART_ALLOWED_HOST || "usercontent.jamendo.com";
+const ALBUM_ART_USER_AGENT = process.env.ALBUM_ART_USER_AGENT || "jamapp-album-art-proxy";
 
 const lambdaClient = ALBUM_ART_LAMBDA
   ? new LambdaClient({ region: process.env.AWS_REGION || "ap-southeast-2" })
@@ -228,7 +229,28 @@ async function getAlbumArtBuffer(trackId, imageUrl) {
     throw new Error("Invalid album art URL");
   }
 
-  const buffer = await invokeAlbumArtLambda(trackId, sanitizedUrl, cacheKey);
+  async function fetchDirect() {
+    const response = await fetch(sanitizedUrl, {
+      headers: { "User-Agent": ALBUM_ART_USER_AGENT }
+    });
+    if (!response.ok) {
+      throw new Error(`Album art fetch failed: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  let buffer;
+  if (ALBUM_ART_LAMBDA && lambdaClient) {
+    try {
+      buffer = await invokeAlbumArtLambda(trackId, sanitizedUrl, cacheKey);
+    } catch (err) {
+      console.error(`Album art lambda failed for ${trackId}, falling back to direct fetch:`, err);
+      buffer = await fetchDirect();
+    }
+  } else {
+    buffer = await fetchDirect();
+  }
 
   if (memcachedSet) {
     memcachedSet(cacheKey, buffer, ALBUM_ART_TTL_SECONDS).catch(err => {
