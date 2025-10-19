@@ -3,12 +3,13 @@ const session = require('express-session');
 const { Issuer, generators } = require('openid-client');
 const path = require('path');
 const { Buffer } = require('buffer');
+const crypto = require('crypto');
 const Memcached = require('memcached');
 const { promisify } = require('util');
 require('dotenv').config();
 
-const { transcodeBuffer } = require('./routes/ffmpeg');
 const { searchTracks } = require('./routes/jamendo');
+const { JOB_STATUSES, createJobRecord, getJobRecord } = require('../shared/downloadJobs');
 
 const app = express();
 let client;
@@ -62,6 +63,13 @@ async function getFavouritesTableName() {
 
 const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
 const dynamo = new DynamoDBClient({ region: "ap-southeast-2" });
+const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+const sqs = new SQSClient({ region: "ap-southeast-2" });
+const s3 = new S3Client({ region: "ap-southeast-2" });
+
 let FAVOURITES_TABLE;
 const PORT = process.env.PORT;
 
@@ -80,9 +88,71 @@ const ALBUM_ART_WIDTH = Number.isFinite(parsedAlbumArtWidth) && parsedAlbumArtWi
 const ALBUM_ART_ALLOWED_HOST = process.env.ALBUM_ART_ALLOWED_HOST || "usercontent.jamendo.com";
 const ALBUM_ART_USER_AGENT = process.env.ALBUM_ART_USER_AGENT || "jamapp-album-art-proxy";
 
+const DOWNLOAD_JOBS_QUEUE_URL = process.env.DOWNLOAD_JOBS_QUEUE_URL;
+const DOWNLOAD_JOBS_TABLE_NAME = process.env.DOWNLOAD_JOBS_TABLE_NAME;
+const DOWNLOAD_RESULTS_BUCKET = process.env.DOWNLOAD_RESULTS_BUCKET;
+const parsedSignedUrlTtl = parseInt(process.env.DOWNLOAD_RESULTS_URL_TTL_SECONDS || "300", 10);
+const DOWNLOAD_RESULTS_URL_TTL_SECONDS = Number.isFinite(parsedSignedUrlTtl) && parsedSignedUrlTtl > 0 ? parsedSignedUrlTtl : 300;
+
 const lambdaClient = ALBUM_ART_LAMBDA
   ? new LambdaClient({ region: process.env.AWS_REGION || "ap-southeast-2" })
   : null;
+
+function ensureDownloadInfraConfigured() {
+  if (!DOWNLOAD_JOBS_QUEUE_URL || !DOWNLOAD_JOBS_TABLE_NAME || !DOWNLOAD_RESULTS_BUCKET) {
+    throw new Error("Download infrastructure is not configured");
+  }
+}
+
+async function createDownloadJob(userId, trackId, format) {
+  ensureDownloadInfraConfigured();
+
+  const now = new Date().toISOString();
+  const jobId = crypto.randomUUID();
+  const jobRecord = {
+    jobId,
+    userId,
+    trackId: String(trackId),
+    format,
+    status: JOB_STATUSES.PENDING,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await createJobRecord(dynamo, DOWNLOAD_JOBS_TABLE_NAME, jobRecord);
+
+  const message = {
+    jobId,
+    userId,
+    trackId: String(trackId),
+    format
+  };
+
+  await sqs.send(new SendMessageCommand({
+    QueueUrl: DOWNLOAD_JOBS_QUEUE_URL,
+    MessageBody: JSON.stringify(message)
+  }));
+
+  return jobRecord;
+}
+
+async function getDownloadJob(userId, jobId) {
+  ensureDownloadInfraConfigured();
+  const job = await getJobRecord(dynamo, DOWNLOAD_JOBS_TABLE_NAME, jobId);
+  if (!job || job.userId !== userId) {
+    return null;
+  }
+  return job;
+}
+
+async function getDownloadUrlFromResultKey(resultKey) {
+  const key = resultKey.replace(/^\/+/, "");
+  const command = new GetObjectCommand({
+    Bucket: DOWNLOAD_RESULTS_BUCKET,
+    Key: key
+  });
+  return getSignedUrl(s3, command, { expiresIn: DOWNLOAD_RESULTS_URL_TTL_SECONDS });
+}
 
 function initializeMemcached() {
   if (memcachedClient || !MEMCACHED_ENDPOINT) return;
@@ -438,38 +508,58 @@ async function startServer() {
         }
     });
 
-    app.get('/download/:id', checkAuth, async (req, res) => {
-        const trackId = req.params.id;
-        const format = req.query.format;
-
-        try {
-            const trackRes = await fetch(`https://api.jamendo.com/v3.0/tracks/?id=${trackId}&client_id=${CLIENT_ID}&format=json`);
-            if (!trackRes.ok) throw new Error(trackRes.statusText);
-            const trackData = (await trackRes.json()).results[0];
-            if (!trackData) return res.status(404).json({ error: 'Track not found' });
-
-            const audioUrl = trackData.audio;
-            const urlParams = new URLSearchParams(new URL(audioUrl).search);
-            const originalFormat = urlParams.get('format')?.startsWith('mp3') ? 'mp3' : urlParams.get('format');
-
-            const audioRes = await fetch(audioUrl);
-            if (!audioRes.ok) throw new Error(audioRes.statusText);
-
-            if (format === originalFormat) {
-                res.setHeader("Content-Disposition", `attachment; filename="${trackData.name}.${originalFormat}"`);
-                res.setHeader("Content-Type", `audio/${originalFormat}`);
-                audioRes.body.pipe(res);
-            } else {
-                const buffer = Buffer.from(await audioRes.arrayBuffer());
-                const transcodedStream = await transcodeBuffer(buffer, format);
-                res.setHeader("Content-Disposition", `attachment; filename="${trackData.name}.${format}"`);
-                res.setHeader("Content-Type", `audio/${format}`);
-                transcodedStream.pipe(res);
-            }
-        } catch (err) {
-            console.error(err);
-            res.status(500).json({ error: err.message });
+    app.post('/download', checkAuth, async (req, res) => {
+      try {
+        if (!req.isAuthenticated) {
+          return res.status(401).json({ error: 'Not logged in' });
         }
+
+        const { trackId, format } = req.body || {};
+        const allowedFormats = ["mp3", "ogg", "wav", "flac"];
+
+        if (!trackId || !format) {
+          return res.status(400).json({ error: 'Missing trackId or format' });
+        }
+
+        if (!allowedFormats.includes(format)) {
+          return res.status(400).json({ error: 'Unsupported format' });
+        }
+
+        const job = await createDownloadJob(req.session.userInfo.sub, trackId, format);
+        res.status(202).json({ jobId: job.jobId, status: job.status });
+      } catch (err) {
+        console.error("Error creating download job:", err);
+        res.status(503).json({ error: 'Unable to queue download' });
+      }
+    });
+
+    app.get('/download/:jobId/status', checkAuth, async (req, res) => {
+      try {
+        if (!req.isAuthenticated) {
+          return res.status(401).json({ error: 'Not logged in' });
+        }
+
+        const jobId = req.params.jobId;
+        const job = await getDownloadJob(req.session.userInfo.sub, jobId);
+        if (!job) {
+          return res.status(404).json({ error: 'Job not found' });
+        }
+
+        const response = {
+          jobId: job.jobId,
+          status: job.status,
+          message: job.message
+        };
+
+        if (job.status === JOB_STATUSES.COMPLETED && job.resultKey) {
+          response.downloadUrl = await getDownloadUrlFromResultKey(job.resultKey);
+        }
+
+        res.json(response);
+      } catch (err) {
+        console.error("Error retrieving job status:", err);
+        res.status(500).json({ error: 'Failed to load job status' });
+      }
     });
 
     // --- Favourites endpoints ---

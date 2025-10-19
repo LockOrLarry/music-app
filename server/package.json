@@ -26,6 +26,10 @@
     "connect-dynamodb": "^3.0.5",
     "@aws-sdk/client-secrets-manager": "^3.896.0",
     "@aws-sdk/client-lambda": "^3.904.0",
-    "memcached": "^2.2.2"
+    "memcached": "^2.2.2",
+    "@aws-sdk/client-sqs": "^3.904.0",
+    "@aws-sdk/client-s3": "^3.904.0",
+    "@aws-sdk/s3-request-presigner": "^3.904.0",
+    "@aws-sdk/util-dynamodb": "^3.904.0"
   }
 }

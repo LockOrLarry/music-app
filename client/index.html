@@ -49,6 +49,14 @@ let isAuthenticated = false;
 let userInfo = {};
 let favouritedIds = [];
 let logoObjectUrl;
+const DOWNLOAD_STATUS_LABELS = {
+  PENDING: "Queued",
+  RUNNING: "Processing",
+  COMPLETED: "Ready",
+  FAILED: "Failed"
+};
+const DOWNLOAD_POLL_INTERVAL_MS = 2000;
+const DOWNLOAD_MAX_ATTEMPTS = 30;
 
 async function getAuthState() {
   try {
@@ -135,6 +143,88 @@ async function loadLogo() {
   }
 }
 
+async function requestDownloadJob(trackId, format) {
+  const res = await fetch("/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ trackId, format })
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || "Failed to queue download");
+  }
+  const data = await res.json();
+  return data.jobId;
+}
+
+async function pollDownloadJob(jobId, onStatus) {
+  for (let attempt = 0; attempt < DOWNLOAD_MAX_ATTEMPTS; attempt += 1) {
+    const res = await fetch(`/download/${jobId}/status`, { credentials: "include" });
+    if (!res.ok) {
+      throw new Error("Failed to fetch download status");
+    }
+    const data = await res.json();
+    onStatus?.(data.status);
+
+    if (data.status === "COMPLETED" && data.downloadUrl) {
+      return data.downloadUrl;
+    }
+    if (data.status === "FAILED") {
+      throw new Error(data.message || "Transcode failed");
+    }
+
+    const wait = DOWNLOAD_POLL_INTERVAL_MS * Math.min(5, attempt + 1);
+    await new Promise(resolve => setTimeout(resolve, wait));
+  }
+  throw new Error("Download timed out");
+}
+
+function triggerBrowserDownload(url, track, format) {
+  const a = document.createElement("a");
+  const safeName = `${(track.name || track.id).replace(/[^\w\-_\s]/g, "")}.${format}`;
+  a.href = url;
+  a.download = safeName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function startDownloadWorkflow(track, format, button) {
+  const originalText = button ? button.textContent : null;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Queued...";
+  }
+  try {
+    const jobId = await requestDownloadJob(track.id, format);
+    const downloadUrl = await pollDownloadJob(jobId, status => {
+      if (button) {
+        const label = DOWNLOAD_STATUS_LABELS[status] || status;
+        button.textContent = `${label}...`;
+      }
+    });
+    triggerBrowserDownload(downloadUrl, track, format);
+    if (button) {
+      button.textContent = originalText || `Download ${format.toUpperCase()}`;
+    }
+  } catch (err) {
+    console.error("Download failed", err);
+    if (button) {
+      button.textContent = "Failed";
+      setTimeout(() => {
+        button.textContent = originalText || `Download ${format.toUpperCase()}`;
+        button.disabled = false;
+      }, 2000);
+    }
+    alert(err.message || "Download failed");
+    return;
+  }
+  if (button) {
+    button.disabled = false;
+  }
+}
+
 async function searchTracks() {
   const query = document.getElementById("searchInput").value.trim();
   if (!query) return;
@@ -188,9 +278,9 @@ function renderTracks(tracks) {
 
     FORMATS.forEach(format => {
       const btn = document.createElement("button");
-      btn.textContent = `${format.toUpperCase()}`;
+      btn.textContent = `Download ${format.toUpperCase()}`;
       btn.className = (format === "mp3" ? "original" : "transcode");
-      btn.onclick = () => window.location = `/download/${track.id}?format=${format}`;
+      btn.onclick = () => startDownloadWorkflow(track, format, btn);
       trackDiv.appendChild(btn);
     });
 
@@ -268,20 +358,19 @@ function showSearchPage() {
   searchTracks(); // Re-run the last search or show empty state
 }
 
-function downloadAllFlac() {
-  fetch("/myfavourites", { credentials: "include" })
-    .then(res => res.json())
-    .then(data => {
-      const tracks = data.results || [];
-      tracks.forEach(track => {
-        const a = document.createElement("a");
-        a.href = `/download/${track.id}?format=flac`;
-        a.download = `${track.name || track.id}.flac`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      });
-    });
+async function downloadAllFlac() {
+  try {
+    const res = await fetch("/myfavourites", { credentials: "include" });
+    if (!res.ok) throw new Error(res.statusText || "Failed to load favourites");
+    const data = await res.json();
+    const tracks = data.results || [];
+    for (const track of tracks) {
+      await startDownloadWorkflow(track, "flac");
+    }
+  } catch (err) {
+    console.error("Bulk download failed", err);
+    alert(err.message || "Bulk download failed");
+  }
 }
 
 window.addEventListener("popstate", () => { location.pathname === "/myfavourites" ? showFavouritesPage() : showSearchPage(); });

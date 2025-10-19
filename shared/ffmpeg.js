@@ -1,16 +1,9 @@
 const ffmpeg = require("fluent-ffmpeg");
 const { Readable } = require("stream");
 
-/**
- * Transcode a track from a buffer or stream to the specified format with max CPU intensity.
- * @param {Buffer|Readable} input - The original audio data (Buffer or Stream).
- * @param {string} format - Target format (e.g., 'ogg', 'mp3', 'flac', 'wav', 'opus').
- * @returns {Promise<Readable>} - A readable stream of the transcoded track.
- */
 function transcodeBuffer(input, format) {
   return new Promise((resolve, reject) => {
     try {
-      // wrap Buffers in a Readable
       let inputStream = input;
       if (Buffer.isBuffer(input)) {
         const r = new Readable();
@@ -19,30 +12,27 @@ function transcodeBuffer(input, format) {
         inputStream = r;
       }
 
-      // base options
-      let options = ["-threads 0"];
-
-      // choose codec-specific heavy settings
+      const options = ["-threads 0"];
       switch (format) {
         case "mp3":
           options.push("-c:a libmp3lame", "-qscale:a 0");
-          options.push("-af aresample=resampler=soxr"); // safe for mp3
+          options.push("-af aresample=resampler=soxr");
           break;
         case "ogg":
           options.push("-c:a libvorbis", "-qscale:a 10");
-          options.push("-af aresample=resampler=soxr"); // safe for vorbis
+          options.push("-af aresample=resampler=soxr");
           break;
         case "flac":
           options.push("-c:a flac", "-compression_level 12");
-          options.push("-af aresample=resampler=soxr:precision=33"); // CPU heavy, safe
+          options.push("-af aresample=resampler=soxr:precision=33");
           break;
         case "wav":
           options.push("-c:a pcm_s24le");
-          options.push("-af aresample=resampler=soxr:precision=33"); // CPU heavy, safe
+          options.push("-af aresample=resampler=soxr:precision=33");
           break;
         case "opus":
           options.push("-c:a libopus", "-b:a 64k", "-vbr constrained", "-application audio");
-          options.push("-af aresample=resampler=soxr"); // opus safe
+          options.push("-af aresample=resampler=soxr");
           break;
         default:
           options.push("-c:a libmp3lame", "-qscale:a 0", "-af aresample=resampler=soxr");
@@ -51,10 +41,10 @@ function transcodeBuffer(input, format) {
       const command = ffmpeg(inputStream)
         .format(format)
         .outputOptions(options)
-        .on("error", (err) => {
+        .on("error", err => {
           console.error("FFmpeg error:", err);
           reject(err);
-        })
+        });
 
       const outputStream = command.pipe({ end: true });
       resolve(outputStream);

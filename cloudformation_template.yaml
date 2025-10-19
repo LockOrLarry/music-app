@@ -76,6 +76,80 @@ Resources:
       Type: String
       Value: 8d0c92e6
 
+  DownloadJobsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: jamapp-download-jobs-dlq
+      MessageRetentionPeriod: 1209600
+
+  DownloadJobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: jamapp-download-jobs
+      VisibilityTimeout: 180
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DownloadJobsDLQ.Arn
+        maxReceiveCount: 5
+
+  DownloadJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: jamapp-download-jobs
+      AttributeDefinitions:
+        - AttributeName: job_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: job_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Project
+          Value: JamApp
+        - Key: Environment
+          Value: Production
+
+  DownloadResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub jamapp-download-results-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Suspended
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldDownloads
+            Status: Enabled
+            ExpirationInDays: 7
+
+  DownloadJobsQueueParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/DownloadJobsQueueUrl
+      Type: String
+      Value: !Ref DownloadJobsQueue
+
+  DownloadJobsTableParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/DownloadJobsTableName
+      Type: String
+      Value: !Ref DownloadJobsTable
+
+  DownloadResultsBucketParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/DownloadResultsBucket
+      Type: String
+      Value: !Ref DownloadResultsBucket
+
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
@@ -87,3 +161,15 @@ Outputs:
     Value: !Ref FavouritesTable
     Export:
       Name: JamApp-FavouritesTableName
+  DownloadJobsQueueUrl:
+    Value: !Ref DownloadJobsQueue
+    Export:
+      Name: JamApp-DownloadJobsQueueUrl
+  DownloadJobsTableName:
+    Value: !Ref DownloadJobsTable
+    Export:
+      Name: JamApp-DownloadJobsTableName
+  DownloadResultsBucketName:
+    Value: !Ref DownloadResultsBucket
+    Export:
+      Name: JamApp-DownloadResultsBucket

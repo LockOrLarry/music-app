@@ -1,5 +1,6 @@
 volumes:
   server_node_modules:
+  worker_node_modules:
 
 services:
   server:
@@ -8,8 +9,20 @@ services:
       dockerfile: ./server/Dockerfile
     container_name: music-server
     restart: always
-    env_file: ./server/.env
+    env_file:
+      - ./server/.env
     ports:
       - "5000:5000"
     volumes:
       - server_node_modules:/usr/src/app/node_modules
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+    container_name: music-worker
+    restart: always
+    env_file:
+      - ./worker/.env
+    volumes:
+      - worker_node_modules:/usr/src/worker/node_modules
