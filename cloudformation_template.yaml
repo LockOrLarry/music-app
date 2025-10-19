@@ -26,20 +26,63 @@ Resources:
           #!/bin/bash
           set -xe
 
-          # Only update and install what's needed (no docker)
+          # Update packages and install dependencies
           apt-get update -y
-          apt-get install -y nginx openssl
+          apt-get install -y nginx openssl git docker-compose-plugin
 
           # Start Docker (if not already running)
           systemctl enable docker
           systemctl start docker
 
-          # Pull and run app
+          # Prepare application directory
+          cd /opt
+          rm -rf music-app || true
+          git clone https://github.com/LockOrLarry/music-app.git
+          cd music-app
+
+          # Fetch dynamic configuration from Parameter Store
+          DOWNLOAD_QUEUE_URL=$(aws ssm get-parameter --name "/jamapp/DownloadJobsQueueUrl" --query 'Parameter.Value' --output text --region ap-southeast-2)
+          DOWNLOAD_TABLE_NAME=$(aws ssm get-parameter --name "/jamapp/DownloadJobsTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
+          DOWNLOAD_RESULTS_BUCKET=$(aws ssm get-parameter --name "/jamapp/DownloadResultsBucket" --query 'Parameter.Value' --output text --region ap-southeast-2)
+
+          # Write API environment file
+          cat > server/.env <<EOF
+PORT=5000
+
+COGNITO_CLIENT_ID=8undkg72rht6trgdb61j767lu
+COGNITO_USER_POOL_ID=ap-southeast-2_k6WMVcixi
+COGNITO_CLIENT_SECRET=e9teola2qunkun5ssk5m6pc4u6h2i8odurl80maknac9hu44d6p
+COGNITO_REDIRECT_URI=https://jamapp.cab432.com/callback
+COGNITO_DOMAIN=ap-southeast-2k6wmvcixi.auth.ap-southeast-2.amazoncognito.com
+
+ALBUM_ART_LAMBDA=
+
+DYNAMO_FAVOURITES_TABLE=group39-favourites
+DOWNLOAD_JOBS_QUEUE_URL=${DOWNLOAD_QUEUE_URL}
+DOWNLOAD_JOBS_TABLE_NAME=${DOWNLOAD_TABLE_NAME}
+DOWNLOAD_RESULTS_BUCKET=${DOWNLOAD_RESULTS_BUCKET}
+DOWNLOAD_RESULTS_PREFIX=downloads/
+DOWNLOAD_RESULTS_URL_TTL_SECONDS=300
+EOF
+
+          # Write worker environment file
+          cat > worker/.env <<EOF
+AWS_REGION=ap-southeast-2
+DOWNLOAD_JOBS_QUEUE_URL=${DOWNLOAD_QUEUE_URL}
+DOWNLOAD_JOBS_TABLE_NAME=${DOWNLOAD_TABLE_NAME}
+DOWNLOAD_RESULTS_BUCKET=${DOWNLOAD_RESULTS_BUCKET}
+DOWNLOAD_RESULTS_PREFIX=downloads/
+DOWNLOAD_WORKER_VISIBILITY_TIMEOUT=180
+DOWNLOAD_WORKER_WAIT_TIME_SECONDS=20
+EOF
+
+          # Authenticate with ECR
           aws ecr get-login-password --region ap-southeast-2 \
             | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
-          docker pull 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
-          docker rm -f music-server || true
-          docker run -d --restart unless-stopped -p 5000:5000 --name music-server 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11399589-assignment1-repo:server
+
+          # Deploy services via Docker Compose
+          docker compose pull
+          docker compose up -d
   
   FavouritesTable:
     Type: AWS::DynamoDB::Table
