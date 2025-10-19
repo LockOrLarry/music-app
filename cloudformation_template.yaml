@@ -48,13 +48,13 @@ Resources:
           TABLE_NAME=$(aws ssm get-parameter --name "/jamapp/DownloadJobsTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
           RESULTS_BUCKET=$(aws ssm get-parameter --name "/jamapp/DownloadResultsBucket" --query 'Parameter.Value' --output text --region ap-southeast-2)
 
-          sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=${QUEUE_URL}|" server/.env
-          sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=${TABLE_NAME}|" server/.env
-          sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=${RESULTS_BUCKET}|" server/.env
+          sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" server/.env
+          sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" server/.env
+          sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=$RESULTS_BUCKET|" server/.env
 
-          sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=${QUEUE_URL}|" worker/.env
-          sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=${TABLE_NAME}|" worker/.env
-          sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=${RESULTS_BUCKET}|" worker/.env
+          sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" worker/.env
+          sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" worker/.env
+          sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=$RESULTS_BUCKET|" worker/.env
 
           # Authenticate with ECR
           aws ecr get-login-password --region ap-southeast-2 \
