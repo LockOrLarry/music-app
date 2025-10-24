@@ -84,6 +84,13 @@ Resources:
         - Key: Environment
           Value: Production
   
+  FavouritesTableNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/FavouritesTableName
+      Type: String
+      Value: !Ref FavouritesTable
+      Description: Favourites table name shared with application services
 
 Outputs:
   InstanceId:
