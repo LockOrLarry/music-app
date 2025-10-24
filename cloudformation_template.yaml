@@ -67,7 +67,6 @@ Resources:
   FavouritesTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: jamapp-favourites
       AttributeDefinitions:
         - AttributeName: user_id
           AttributeType: S
@@ -96,4 +95,4 @@ Outputs:
   FavouritesTableName:
     Value: !Ref FavouritesTable
     Export:
-      Name: JamApp-FavouritesTableName
+      Name: !Sub "${AWS::StackName}-FavouritesTableName"
