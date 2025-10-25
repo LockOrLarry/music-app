@@ -47,12 +47,10 @@ Resources:
           QUEUE_URL=$(aws ssm get-parameter --name "/jamapp/DownloadJobsQueueUrl" --query 'Parameter.Value' --output text --region ap-southeast-2)
           TABLE_NAME=$(aws ssm get-parameter --name "/jamapp/DownloadJobsTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
           RESULTS_BUCKET=$(aws ssm get-parameter --name "/jamapp/DownloadResultsBucket" --query 'Parameter.Value' --output text --region ap-southeast-2)
-          FAVOURITES_TABLE="${FavouritesTable}"
 
           sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" server/.env
           sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" server/.env
           sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=$RESULTS_BUCKET|" server/.env
-          sed -i "s|^DYNAMO_FAVOURITES_TABLE=.*|DYNAMO_FAVOURITES_TABLE=$FAVOURITES_TABLE|" server/.env
 
           sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" worker/.env
           sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" worker/.env
@@ -86,6 +84,14 @@ Resources:
         - Key: Environment
           Value: Production
   
+  FavouritesTableNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /jamapp/FavouritesTableName
+      Type: String
+      Value: !Ref FavouritesTable
+      Description: Favourites table name shared with application services
+
 Outputs:
   InstanceId:
     Description: EC2 Instance ID
