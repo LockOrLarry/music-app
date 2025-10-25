@@ -28,6 +28,14 @@ Resources:
 
           # Update packages and install dependencies
           apt-get update -y
+          while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            echo "Waiting for dpkg lock (frontend)..."
+            sleep 5
+          done
+          while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+            echo "Waiting for dpkg lock (lists)..."
+            sleep 5
+          done
           apt-get install -y nginx openssl git docker-compose-plugin
 
           # Start Docker (if not already running)
