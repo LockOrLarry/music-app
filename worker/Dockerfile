@@ -8,6 +8,7 @@ RUN apt-get update \
 
 COPY worker/package*.json ./
 RUN npm install --omit=dev
+RUN ln -s /usr/src/worker/node_modules /usr/src/node_modules
 
 COPY shared ../shared
 COPY worker/index.js .
