@@ -53,17 +53,49 @@ app.use((req, res, next) => {
   next();
 });
 
-function getFavouritesTableName() {
-  const resolved =
+async function getFavouritesTableName() {
+  const envFallback =
     process.env.DYNAMO_FAVOURITES_TABLE || process.env.FAVOURITES_TABLE;
 
-  if (!resolved) {
-    throw new Error(
-      "Favourites table name not configured; set DYNAMO_FAVOURITES_TABLE in .env"
-    );
-  }
+  try {
+    const param = await ssm.send(new GetParameterCommand({
+      Name: "/jamapp/FavouritesTableName",
+      WithDecryption: false
+    }));
+    if (param?.Parameter?.Value) {
+      if (envFallback && envFallback !== param.Parameter.Value) {
+        console.warn(
+          "Favourites table SSM value overrides environment fallback",
+          { envFallback, resolved: param.Parameter.Value }
+        );
+      }
+      return param.Parameter.Value;
+    }
+    if (envFallback) {
+      console.warn(
+        "Favourites table SSM parameter returned no value; using environment fallback",
+        { envFallback }
+      );
+      return envFallback;
+    }
+    throw new Error("Favourites table name is not configured");
+  } catch (err) {
+    const errorCode =
+      err?.name ||
+      err?.Code ||
+      (typeof err?.__type === "string" ? err.__type.split("#").pop() : undefined);
 
-  return resolved;
+    if (errorCode === "ParameterNotFound" && envFallback) {
+      console.warn(
+        "Favourites table SSM parameter not found; using environment fallback",
+        { envFallback }
+      );
+      return envFallback;
+    }
+
+    console.error("Failed to resolve favourites table name", err);
+    throw err;
+  }
 }
 
 const { DynamoDBClient, PutItemCommand, DeleteItemCommand, QueryCommand } = require("@aws-sdk/client-dynamodb");
@@ -337,7 +369,7 @@ async function getAlbumArtBuffer(trackId, imageUrl) {
 }
 
 async function initializeApp() {
-    FAVOURITES_TABLE = getFavouritesTableName();
+    FAVOURITES_TABLE = await getFavouritesTableName();
     jwtSecret = await getJwtSecret();
     
     app.use(session({
