@@ -18,7 +18,6 @@ RUN apt-get update \
 
 COPY server/package*.json ./
 RUN npm ci --omit=dev
-RUN ln -s /usr/src/app/node_modules /usr/src/node_modules
 COPY server ./
 COPY shared ../shared
 COPY --from=client-build /usr/src/client/dist ./client/dist
