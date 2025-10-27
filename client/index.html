@@ -5,7 +5,7 @@
 <title>Jamapp</title>
 <style>
   body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
-  #appHeader { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 20px; }
+  #appHeader { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 60px 0 20px; }
   #appLogo { display: none; height: 64px; width: 64px; object-fit: contain; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   #appTitle { text-align: center; margin: 0; }
   #searchContainer { display: flex; justify-content: center; margin-bottom: 20px; }
@@ -98,7 +98,10 @@ function setAuthUI(auth, info) {
     document.getElementById("logoutBtn").onclick = () => {
         window.location.href = "/logout";
     };
-    document.getElementById("favouritesBtn").onclick = showFavouritesPage;
+    const favouritesBtn = document.getElementById("favouritesBtn");
+    const isOnFavourites = window.location.pathname === "/myfavourites";
+    favouritesBtn.textContent = isOnFavourites ? "Search" : "Favourites";
+    favouritesBtn.onclick = isOnFavourites ? showSearchPage : showFavouritesPage;
     document.getElementById("downloadAllFlacBtn").onclick = downloadAllFlac;
   } else {
     container.innerHTML = `<button id="oidcLoginBtn" class="authBtn">Login with OIDC</button>`;
@@ -346,6 +349,7 @@ async function showFavouritesPage() {
         console.error("Error fetching favourites:", err);
     }
     resultsDiv.appendChild(backBtn);
+    setAuthUI(isAuthenticated, userInfo);
 }
 
 function showSearchPage() {
@@ -356,20 +360,47 @@ function showSearchPage() {
   document.getElementById("results").innerHTML = "";
   // Clear any existing search results and reset the page
   searchTracks(); // Re-run the last search or show empty state
+  setAuthUI(isAuthenticated, userInfo);
 }
 
 async function downloadAllFlac() {
+  const button = document.getElementById("downloadAllFlacBtn");
+  if (!button) return;
+  const originalText = button.textContent;
   try {
+    button.disabled = true;
+    button.textContent = "Fetching favourites...";
     const res = await fetch("/myfavourites", { credentials: "include" });
     if (!res.ok) throw new Error(res.statusText || "Failed to load favourites");
     const data = await res.json();
     const tracks = data.results || [];
-    for (const track of tracks) {
-      await startDownloadWorkflow(track, "flac");
+    if (!tracks.length) {
+      button.textContent = "No favourites";
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.disabled = false;
+      }, 2000);
+      return;
     }
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      const progressLabel = `${i + 1}/${tracks.length}`;
+      button.textContent = `${progressLabel} ${DOWNLOAD_STATUS_LABELS.PENDING}...`;
+      const jobId = await requestDownloadJob(track.id, "flac");
+      const downloadUrl = await pollDownloadJob(jobId, status => {
+        const label = DOWNLOAD_STATUS_LABELS[status] || status;
+        button.textContent = `${progressLabel} ${label}...`;
+      });
+      triggerBrowserDownload(downloadUrl, track, "flac");
+    }
+    button.textContent = originalText;
   } catch (err) {
     console.error("Bulk download failed", err);
     alert(err.message || "Bulk download failed");
+    button.textContent = "Failed";
+    setTimeout(() => { button.textContent = originalText; }, 2000);
+  } finally {
+    button.disabled = false;
   }
 }
 
