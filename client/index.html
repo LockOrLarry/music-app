@@ -278,7 +278,7 @@ function renderTracks(tracks) {
 
     FORMATS.forEach(format => {
       const btn = document.createElement("button");
-      btn.textContent = `Download ${format.toUpperCase()}`;
+      btn.textContent = `${format.toUpperCase()}`;
       btn.className = (format === "mp3" ? "original" : "transcode");
       btn.onclick = () => startDownloadWorkflow(track, format, btn);
       trackDiv.appendChild(btn);

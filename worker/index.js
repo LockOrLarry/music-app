@@ -66,7 +66,7 @@ async function downloadOriginalAudio(audioUrl) {
   return buffer;
 }
 
-async function uploadToS3(key, body, contentType, metadata) {
+async function uploadToS3(key, body, contentType, metadata, downloadName) {
   const upload = new Upload({
     client: s3,
     params: {
@@ -74,10 +74,20 @@ async function uploadToS3(key, body, contentType, metadata) {
       Key: key,
       Body: body,
       ContentType: contentType,
-      Metadata: metadata
+      Metadata: metadata,
+      ...(downloadName ? { ContentDisposition: `attachment; filename="${downloadName}"` } : {})
     }
   });
   await upload.done();
+}
+
+function buildDownloadFileName(track, trackId, format) {
+  const rawName = track?.name || `track_${trackId}`;
+  const safeStem = rawName
+    .replace(/[^\w\s.-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "_") || `track_${trackId}`;
+  return `${safeStem}.${format}`;
 }
 
 async function processJobMessage(message) {
@@ -125,11 +135,13 @@ async function processJobMessage(message) {
     }
 
     const key = `${NORMALIZED_PREFIX}${jobId}.${format}`;
+    const downloadName = buildDownloadFileName(track, trackId, format);
+
     await uploadToS3(key, body, contentType, {
       trackid: String(trackId),
       requestedformat: format,
       sourceformat: sourceFormat || "unknown"
-    });
+    }, downloadName);
 
     await updateJobRecord(dynamo, JOBS_TABLE, jobId, {
       status: JOB_STATUSES.COMPLETED,
