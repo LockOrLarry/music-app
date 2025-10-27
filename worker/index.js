@@ -147,7 +147,8 @@ async function processJobMessage(message) {
       status: JOB_STATUSES.COMPLETED,
       updatedAt: now(),
       resultKey: key,
-      sourceFormat: sourceFormat || format
+      sourceFormat: sourceFormat || format,
+      downloadFileName: downloadName
     });
 
     return true;

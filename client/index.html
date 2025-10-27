@@ -206,14 +206,14 @@ async function startDownloadWorkflow(track, format, button) {
     });
     triggerBrowserDownload(downloadUrl, track, format);
     if (button) {
-      button.textContent = originalText || `Download ${format.toUpperCase()}`;
+      button.textContent = originalText || `${format.toUpperCase()}`;
     }
   } catch (err) {
     console.error("Download failed", err);
     if (button) {
       button.textContent = "Failed";
       setTimeout(() => {
-        button.textContent = originalText || `Download ${format.toUpperCase()}`;
+        button.textContent = originalText || `${format.toUpperCase()}`;
         button.disabled = false;
       }, 2000);
     }

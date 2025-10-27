@@ -182,11 +182,22 @@ async function getDownloadJob(userId, jobId) {
   return job;
 }
 
-async function getDownloadUrlFromResultKey(resultKey) {
+function sanitizeDownloadFileName(name) {
+  return (name || "download")
+    .replace(/[^\w\s.-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "_") || "download";
+}
+
+async function getDownloadUrlFromResultKey(resultKey, downloadFileName) {
   const key = resultKey.replace(/^\/+/, "");
+  const safeName = sanitizeDownloadFileName(
+    downloadFileName || path.basename(key)
+  );
   const command = new GetObjectCommand({
     Bucket: DOWNLOAD_RESULTS_BUCKET,
-    Key: key
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${safeName}"`
   });
   return getSignedUrl(s3, command, { expiresIn: DOWNLOAD_RESULTS_URL_TTL_SECONDS });
 }
@@ -589,7 +600,10 @@ async function startServer() {
         };
 
         if (job.status === JOB_STATUSES.COMPLETED && job.resultKey) {
-          response.downloadUrl = await getDownloadUrlFromResultKey(job.resultKey);
+          response.downloadUrl = await getDownloadUrlFromResultKey(
+            job.resultKey,
+            job.downloadFileName
+          );
         }
 
         res.json(response);

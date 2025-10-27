@@ -20,7 +20,8 @@ function toDynamoItem(job) {
 
   if (job.message) item.message = job.message;
   if (job.resultKey) item.result_key = job.resultKey;
-  if (job.source_format) item.source_format = job.sourceFormat;
+  if (job.sourceFormat) item.source_format = job.sourceFormat;
+  if (job.downloadFileName) item.download_file_name = job.downloadFileName;
 
   return marshall(item, { removeUndefinedValues: true });
 }
@@ -66,6 +67,12 @@ async function updateJobRecord(dynamo, tableName, jobId, updates) {
     UpdateExpression += ", #source_format = :source_format";
   }
 
+  if (updates.downloadFileName !== undefined) {
+    ExpressionAttributeNames["#download_file_name"] = "download_file_name";
+    ExpressionAttributeValues[":download_file_name"] = { S: updates.downloadFileName };
+    UpdateExpression += ", #download_file_name = :download_file_name";
+  }
+
   await dynamo.send(
     new UpdateItemCommand({
       TableName: tableName,
@@ -99,7 +106,8 @@ async function getJobRecord(dynamo, tableName, jobId) {
     updatedAt: data.updated_at,
     message: data.message,
     resultKey: data.result_key,
-    sourceFormat: data.source_format
+    sourceFormat: data.source_format,
+    downloadFileName: data.download_file_name
   };
 }
 
