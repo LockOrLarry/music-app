@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A music search application using a prebuilt Docker AMI.
+Description: A music search application using separate EC2 instances for frontend and backend containers.
 
 Parameters:
   KeyName:
@@ -8,7 +8,7 @@ Parameters:
     Default: n11399589
 
 Resources:
-  MusicServerInstance:
+  FrontendInstance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t3.micro
@@ -25,55 +25,61 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -xe
-
-          # Update packages and install dependencies
           apt-get update -y
-          while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-            echo "Waiting for dpkg lock (frontend)..."
-            sleep 5
-          done
-          while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
-            echo "Waiting for dpkg lock (lists)..."
-            sleep 5
-          done
           apt-get install -y nginx openssl git docker-compose-plugin
-
-          # Start Docker (if not already running)
           systemctl enable docker
           systemctl start docker
-
-          # Prepare application directory
           cd /opt
-          rm -rf music-app || true
           git clone https://github.com/LockOrLarry/music-app.git
           cd music-app
-
-          # Seed environment files from templates and populate dynamic values
           cp server/.env.template server/.env
-          cp worker/.env.template worker/.env
-
           QUEUE_URL=$(aws ssm get-parameter --name "/jamapp/DownloadJobsQueueUrl" --query 'Parameter.Value' --output text --region ap-southeast-2)
           TABLE_NAME=$(aws ssm get-parameter --name "/jamapp/DownloadJobsTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
           RESULTS_BUCKET=$(aws ssm get-parameter --name "/jamapp/DownloadResultsBucket" --query 'Parameter.Value' --output text --region ap-southeast-2)
           FAVOURITES_TABLE=$(aws ssm get-parameter --name "/jamapp/FavouritesTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
-
           sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" server/.env
           sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" server/.env
           sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=$RESULTS_BUCKET|" server/.env
           sed -i "s|^DYNAMO_FAVOURITES_TABLE=.*|DYNAMO_FAVOURITES_TABLE=$FAVOURITES_TABLE|" server/.env
+          aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
+          docker compose pull server
+          docker compose up -d server
 
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0e25e0874539dd125
+      IamInstanceProfile: CAB432-Instance-Role
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: subnet-05a3b8177138c8b14
+          AssociatePublicIpAddress: true
+          GroupSet:
+            - sg-032bd1ff8cf77dbb9
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -xe
+          apt-get update -y
+          apt-get install -y nginx openssl git docker-compose-plugin
+          systemctl enable docker
+          systemctl start docker
+          cd /opt
+          git clone https://github.com/LockOrLarry/music-app.git
+          cd music-app
+          cp worker/.env.template worker/.env
+          QUEUE_URL=$(aws ssm get-parameter --name "/jamapp/DownloadJobsQueueUrl" --query 'Parameter.Value' --output text --region ap-southeast-2)
+          TABLE_NAME=$(aws ssm get-parameter --name "/jamapp/DownloadJobsTableName" --query 'Parameter.Value' --output text --region ap-southeast-2)
+          RESULTS_BUCKET=$(aws ssm get-parameter --name "/jamapp/DownloadResultsBucket" --query 'Parameter.Value' --output text --region ap-southeast-2)
           sed -i "s|^DOWNLOAD_JOBS_QUEUE_URL=.*|DOWNLOAD_JOBS_QUEUE_URL=$QUEUE_URL|" worker/.env
           sed -i "s|^DOWNLOAD_JOBS_TABLE_NAME=.*|DOWNLOAD_JOBS_TABLE_NAME=$TABLE_NAME|" worker/.env
           sed -i "s|^DOWNLOAD_RESULTS_BUCKET=.*|DOWNLOAD_RESULTS_BUCKET=$RESULTS_BUCKET|" worker/.env
+          aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
+          docker compose pull worker
+          docker compose up -d worker
 
-          # Authenticate with ECR
-          aws ecr get-login-password --region ap-southeast-2 \
-            | docker login --username AWS --password-stdin 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com
-
-          # Deploy services via Docker Compose
-          docker compose pull
-          docker compose up -d
-  
   FavouritesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -94,15 +100,20 @@ Resources:
           Value: JamApp
         - Key: Environment
           Value: Production
-  
 
 Outputs:
-  InstanceId:
-    Description: EC2 Instance ID
-    Value: !Ref MusicServerInstance
-  PublicIP:
-    Description: Public IP of the EC2 instance
-    Value: !GetAtt MusicServerInstance.PublicIp
+  FrontendInstanceId:
+    Description: EC2 Instance ID for Frontend
+    Value: !Ref FrontendInstance
+  FrontendPublicIP:
+    Description: Public IP of the Frontend EC2
+    Value: !GetAtt FrontendInstance.PublicIp
+  BackendInstanceId:
+    Description: EC2 Instance ID for Backend
+    Value: !Ref BackendInstance
+  BackendPublicIP:
+    Description: Public IP of the Backend EC2
+    Value: !GetAtt BackendInstance.PublicIp
   FavouritesTableName:
     Value: !Ref FavouritesTable
     Export:
