@@ -329,7 +329,6 @@ async function showFavouritesPage() {
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
 
-    // Back button
     const backBtn = document.createElement("button");
     backBtn.id = "backBtn"
     backBtn.textContent = "Back to Search";
@@ -358,8 +357,7 @@ function showSearchPage() {
   const title = document.getElementById("appTitle");
   if (title) title.textContent = "Jamapp";
   document.getElementById("results").innerHTML = "";
-  // Clear any existing search results and reset the page
-  searchTracks(); // Re-run the last search or show empty state
+  searchTracks(); 
   setAuthUI(isAuthenticated, userInfo);
 }
 
@@ -412,7 +410,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("loggedin")) {
     window.history.replaceState({}, "", "/");
-    setTimeout(getAuthState, 100); // slight delay to ensure session cookie is set
+    setTimeout(getAuthState, 100); 
   } else {
     getAuthState();
   }
